@@ -1634,6 +1634,8 @@ constexpr int battery_event_reference_value(float battery_voltage)
 static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, battery_event_reference_value(3.5) + 2);
 static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, battery_event_reference_value(3.5));
 static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0));
+
+static TimerEvent voltage_print_event(60000);
 #endif
 
 static SerialEvent serial_event;
@@ -1666,6 +1668,21 @@ static EventHandler track_finished_handler([]() -> bool { return mode->track_fin
 static EventHandler battery_high_handler([]() -> bool { return mode->battery_high(); });
 static EventHandler battery_low_handler([]() -> bool { return mode->battery_low(); });
 static EventHandler battery_critical_handler([]() -> bool { return mode->battery_critical(); });
+
+bool print_battery_voltage()
+{
+    int val = analogRead(VOLTAGE_PIN);
+    Serial.print(F("Current battery voltage: "));
+
+    int voltage = val * ref_voltage / 1023 / factor * 1000;
+    Serial.print(voltage);
+    Serial.println(F(" mV"));
+
+    return true;
+
+}
+static EventHandler voltage_print_handler(&print_battery_voltage);
+
 #endif
 
 static EventHandler serial_event_handler(handle_serial_event);
@@ -1735,6 +1752,9 @@ void setup()
     mgr.add(&battery_low_event);
     battery_critical_event.listen(&battery_critical_handler);
     mgr.add(&battery_critical_event);
+
+    voltage_print_event.listen(&voltage_print_handler);
+    mgr.add(&voltage_print_event);
 #endif
 
     serial_event.listen(&serial_event_handler);
