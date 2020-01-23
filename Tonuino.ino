@@ -1606,9 +1606,34 @@ TrackFinishedEvent *MP3Notification::e = &track_finished_event; // We need to gi
                                                                 // event loop.
 
 #ifdef STATUS_LED
-static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, 610);
-static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, 600);
-static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, 350);
+/* This method will calculate the ADC value interpreted from the
+   voltage at the voltage pin, so that we can decide in which state
+   the battery currently is.
+
+   The system assumes that there is some for of voltage divider
+   where the battery voltage is scaled to a comparable value.
+   This scaled battery voltage is then interpreted by the internal
+   ADC in we now have to calculate which value return by the ADC
+   corresponds to which real battery voltage
+
+   Adapt the below constants according to your circuit.
+ */
+static const int R1_kohm = 499;
+static const int R2_kohm = 100;
+static const constexpr float factor = static_cast<float>(R1_kohm + R2_kohm) / static_cast<float>(R2_kohm);
+
+/* The internal reference voltage (either 1.1V if set to INTERNAL or 3.5V - 5V of not)
+   I highly recommend using the constant internal reference voltage of 1.1V! */
+static const constexpr float ref_voltage = 1.1;
+
+constexpr int battery_event_reference_value(float battery_voltage)
+{
+    return (battery_voltage / factor) * (1023 / ref_voltage);
+}
+
+static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, battery_event_reference_value(3.5) + 2);
+static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, battery_event_reference_value(3.5));
+static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0));
 #endif
 
 static SerialEvent serial_event;
