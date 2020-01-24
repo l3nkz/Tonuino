@@ -94,6 +94,12 @@ static const uint32_t STANDBY_TIME_MS = 600000;     // == 10 minutes
 /* The duration the system waits before stopping a paused playback */
 static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
 
+#ifdef STATUS_LED
+/* How long the system should wait between consecutive outputs of
+   the current battery voltage. */
+static const uint32_t PRINT_VOLTAGE_MS = 120000;     // == 2 minutes
+#endif
+
 /* The duration after which a button press is considered a long press */
 static const uint32_t LONG_PRESS_MS = 1000;         // == 1 second
 
@@ -1710,7 +1716,7 @@ static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, b
 static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, battery_event_reference_value(3.5));
 static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0));
 
-static TimerEvent voltage_print_event(60000);
+static TimerEvent voltage_print_event(PRINT_VOLTAGE_MS, true);
 #endif
 
 static SerialEvent serial_event;
@@ -1749,15 +1755,16 @@ bool print_battery_voltage()
     int val = analogRead(VOLTAGE_PIN);
     Serial.print(F("Current battery voltage: "));
 
-    int voltage = val * ref_voltage / 1023 / factor * 1000;
+    int voltage = val * ref_voltage / 1023 * factor * 1000;
     Serial.print(voltage);
-    Serial.println(F(" mV"));
+    Serial.print(F(" mV ("));
+    Serial.print(val);
+    Serial.println(F(")"));
 
     return true;
 
 }
 static EventHandler voltage_print_handler(&print_battery_voltage);
-
 #endif
 
 static EventHandler serial_event_handler(handle_serial_event);
