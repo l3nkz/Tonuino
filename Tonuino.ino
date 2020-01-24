@@ -1700,6 +1700,16 @@ void setup()
     digitalWrite(SHUTDOWN_PIN, LOW);
 #endif
 
+    /* Startup our serial */
+    Serial.begin(115200);
+
+    // Lets get started :)
+    Serial.println(F("\n _____         _____ _____ _____ _____"));
+    Serial.println(F("|_   _|___ ___|  |  |     |   | |     |"));
+    Serial.println(F("  | | | . |   |  |  |-   -| | | |  |  |"));
+    Serial.println(F("  |_| |___|_|_|_____|_____|_|___|_____|\n"));
+    Serial.println(F("Licensed under GNU/GPL"));
+
     /* Load our previous settings */
     settings = new Settings();
 
@@ -1768,12 +1778,6 @@ void setup()
     serial_event.listen(&serial_event_handler);
     mgr.add(&serial_event);
 
-    // Lets get started :)
-    Serial.println(F("\n _____         _____ _____ _____ _____"));
-    Serial.println(F("|_   _|___ ___|  |  |     |   | |     |"));
-    Serial.println(F("  | | | . |   |  |  |-   -| | | |  |  |"));
-    Serial.println(F("  |_| |___|_|_|_____|_____|_|___|_____|\n"));
-    Serial.println(F("Licensed under GNU/GPL"));
 }
 
 void loop()
