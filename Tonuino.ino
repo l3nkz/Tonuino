@@ -652,12 +652,15 @@ class RFIDReader
    public:
     RFIDReader(byte ss_pin, byte rst_pin) : mfrc522{ss_pin, rst_pin}
     {
-        SPI.begin();        // Init SPI bus
-        mfrc522.PCD_Init(); // Init MFRC522
-
         /* Initialize the used key */
         for (byte i = 0; i < 6; ++i)
             key.keyByte[i] = 0xFF;
+    }
+
+    void begin()
+    {
+        SPI.begin();        // Init SPI bus
+        mfrc522.PCD_Init(); // Init MFRC522
     }
 
     bool read_card(RFIDCard &card)
@@ -1702,7 +1705,12 @@ void setup()
 
     /* Initialize all the module wrapper classes */
     mp3_player = new MP3Player(mp3_player_serial);
+    mp3_player->begin();
+    Serial.println(F("Setting up MP3 player - done"));
+
     rfid_reader = new RFIDReader(RFID_SS_PIN, RFID_RST_PIN);
+    rfid_reader->begin();
+    Serial.println(F("Setting up RFIDReader - done"));
 
     mp3_player->setVolume(settings->volume);
     mp3_player->setEq(DfMp3_Eq_Normal);
