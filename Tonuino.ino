@@ -1466,6 +1466,8 @@ class PlaybackMode : public DefaultMode
     {
         Serial.println(F("Started Playback mode"));
 
+        abort_timer.listen(&timer_handler);
+
         set_play_mode(card);
         pmode->play();
     }
@@ -1489,7 +1491,12 @@ class PlaybackMode : public DefaultMode
         }
     }
 
-    bool stop() { return pmode->stop(); }
+    bool stop()
+    {
+        activate_timer();
+        return pmode->stop();
+    }
+
     bool next() { return pmode->next(); }
     bool prev() { return pmode->prev(); }
 
