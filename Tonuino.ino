@@ -468,13 +468,14 @@ class TimerEvent : public Event
 
     void check_and_handle(uint32_t ms)
     {
-        if (next_ms != 0 && ms >= next_ms)
+        if (next_ms != 0 && ms >= next_ms) {
             this->call_handlers();
 
-        if (repeated)
-            next_ms += duration;
-        else
-            next_ms = 0;
+            if (repeated)
+                next_ms += duration;
+            else
+                next_ms = 0;
+        }
     }
 
     void reset()
