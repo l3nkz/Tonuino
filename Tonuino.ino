@@ -172,6 +172,9 @@ class EventManager
         e->next = events;
         events = e;
 
+        Serial.print(F("Event added: "));
+        Serial.println(reinterpret_cast<uint16_t>(e), HEX);
+
         return *this;
     }
 
@@ -184,6 +187,9 @@ class EventManager
                 break;
             }
         }
+
+        Serial.print(F("Event removed: "));
+        Serial.println(reinterpret_cast<uint8_t>(e), HEX);
 
         return *this;
     }
@@ -464,6 +470,8 @@ class TimerEvent : public Event
     TimerEvent(uint32_t duration, bool repeated=false) : duration{duration}, repeated{repeated}, next_ms{0}
     {
         next_ms = millis() + duration;
+        Serial.print(F("Create timer to fire at "));
+        Serial.println(next_ms);
     }
 
     void check_and_handle(uint32_t ms)
@@ -482,6 +490,9 @@ class TimerEvent : public Event
     {
         /* Move the timer forward on reset */
         next_ms = millis() + duration;
+
+        Serial.print(F("Reset timer to "));
+        Serial.println(next_ms);
     }
 };
 
@@ -766,8 +777,10 @@ class RFIDReader
 
 void NewRFIDCardEvent::check_and_handle(uint32_t ms)
 {
-    if (reader->card_available())
+    if (reader->card_available()) {
+        Serial.println(F("New RFID card available"));
         this->call_handlers();
+    }
 }
 
 /****
@@ -867,14 +880,18 @@ class Settings
         volume = 12;
         min_volume = 5;
         max_volume = 25;
-        last_folder_valid = false;
+        last_folder_valid = true;
+        last_folder = 1;
+        last_mode = static_cast<uint8_t>(RFIDCard::Mode::ALBUM);
     }
 
    public:
     Settings() : progresses{nullptr}
     {
-        if (!from_eeprom())
+        if (!from_eeprom()) {
+            Serial.println(F("Failed to load settings from EEPROM"));
             default_init();
+        }
     }
 
     ~Settings()
@@ -1126,9 +1143,12 @@ class PlayerMode
 
     bool play()
     {
-        if (!was_paused)
+        if (!was_paused) {
+            Serial.print(F("Start track "));
+            Serial.println(cur_track);
             play_track(cur_track);
-        else {
+        } else {
+            Serial.print(F("Resume playback"));
             mp3_player->start();
             was_paused = false;
         }
@@ -1138,6 +1158,7 @@ class PlayerMode
 
     bool pause()
     {
+        Serial.println(F("Pause playback"));
         mp3_player->pause();
         was_paused = true;
 
@@ -1146,6 +1167,7 @@ class PlayerMode
 
     bool stop()
     {
+        Serial.println(F("Stop playback"));
         this->_stop();
         mp3_player->stop();
 
@@ -1154,16 +1176,23 @@ class PlayerMode
 
     bool next()
     {
-        if (this->_next())
+        if (this->_next()) {
+            Serial.print(F("Goto next track: "));
+            Serial.println(cur_track);
             return play_track(cur_track);
+        }
 
         return false;
     }
 
     bool prev()
     {
-        if (this->_prev())
+        if (this->_prev()) {
+            Serial.print(F("Goto previous track: "));
+            Serial.println(cur_track);
+
             return play_track(cur_track);
+        }
 
         return false;
     }
@@ -1181,7 +1210,11 @@ class AlbumPlayerMode : public PlayerMode
 {
    public:
     AlbumPlayerMode(uint8_t folder) : PlayerMode{folder}
-    {}
+    {
+        Serial.print(F("Folder: "));
+        Serial.print(folder);
+        Serial.println(F(" mode: ALBUM"));
+    }
 };
 
 class AudioBookPlayerMode : public PlayerMode
@@ -1189,8 +1222,14 @@ class AudioBookPlayerMode : public PlayerMode
    public:
     AudioBookPlayerMode(uint8_t folder) : PlayerMode{folder}
     {
+        Serial.print(F("Folder: "));
+        Serial.print(folder);
+        Serial.println(F(" mode: PLAYBOOK"));
+
         /* Get from the EEPROM where we last finished listening */
         this->cur_track = settings->progress(folder);
+        Serial.print(F("Resume playback at track: "));
+        Serial.println(this->cur_track);
     }
 
     ~AudioBookPlayerMode()
@@ -1232,6 +1271,10 @@ class PartyPlayerMode : public PlayerMode
    public:
     PartyPlayerMode(uint8_t folder) : PlayerMode{folder}, queue{nullptr}, cur_ele{0}
     {
+        Serial.print(F("Folder: "));
+        Serial.print(folder);
+        Serial.println(F(" mode: PARTY"));
+
         /* Generate our title queue */
         queue = new uint8_t[this->max_tracks];
         for (uint16_t i = 0; i < this->max_tracks; ++i)
@@ -1261,6 +1304,11 @@ class RepeatOnePlayerMode : public PlayerMode
    public:
     RepeatOnePlayerMode(uint8_t folder, uint8_t track) : PlayerMode{folder}
     {
+        Serial.print(F("Folder: "));
+        Serial.print(folder);
+        Serial.print(F(" mode: ONE track: "));
+        Serial.println(track);
+
         this->cur_track = track;
     }
 };
@@ -1387,6 +1435,7 @@ class StandbyMode : public DefaultMode
 
     bool timer()
     {
+        Serial.println(F("Shutting down ..."));
         shutdown();
         return true;
     }
@@ -1508,6 +1557,10 @@ class PlaybackMode : public DefaultMode
         settings->volume++;
         mp3_player->increaseVolume();
 
+        Serial.print(F("Increase volume ("));
+        Serial.print(settings->volume);
+        Serial.println(F(")"));
+
         return true;
     }
 
@@ -1519,14 +1572,21 @@ class PlaybackMode : public DefaultMode
         settings->volume--;
         mp3_player->decreaseVolume();
 
+        Serial.print(F("Decrease volume ("));
+        Serial.print(settings->volume);
+        Serial.println(F(")"));
+
         return true;
     }
 
     bool track_finished()
     {
+        Serial.println(F("Current track finished"));
+
         if (!pmode->next()) {
             /* We reached the end of the currently playback mode. Nothing more to play. 
                Go into standby. */
+            Serial.println(F("Done playing"));
             mode = switch_to<StandbyMode>();
         }
 
@@ -1538,8 +1598,12 @@ class PlaybackMode : public DefaultMode
         /* Read in the current card */
         RFIDCard card;
 
-        if (!rfid_reader->read_card(card))
+        if (!rfid_reader->read_card(card)) {
+            Serial.println(F("Failed to read card"));
             return false;
+        }
+
+        Serial.println(F("Switch playback according to card settings"));
 
         /* Stop the old playback */
         pmode->pause();
