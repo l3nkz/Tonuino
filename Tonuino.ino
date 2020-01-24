@@ -1095,7 +1095,7 @@ class PlayerMode
 
     virtual void _stop()
     {
-        cur_track = 0;
+        cur_track = 1;
     }
 
     virtual bool _next()
@@ -1109,15 +1109,15 @@ class PlayerMode
 
     virtual bool _prev()
     {
-        if (cur_track == 0)
+        if (cur_track == 1)
             return false;
 
         cur_track--;
         return true;
     }
 
-    PlayerMode(uint8_t folder) : folder{folder}, cur_track{0},
-        max_tracks{mp3_player->getFolderTrackCount(folder) - 1}, was_paused{false}
+    PlayerMode(uint8_t folder) : folder{folder}, cur_track{1},
+        max_tracks{mp3_player->getFolderTrackCount(folder)}, was_paused{false}
     {}
 
    public:
@@ -1234,7 +1234,7 @@ class PartyPlayerMode : public PlayerMode
         /* Generate our title queue */
         queue = new uint8_t[this->max_tracks];
         for (uint16_t i = 0; i < this->max_tracks; ++i)
-            queue[i] = i;                               // fill in the possible titles
+            queue[i] = i+1;                             // fill in the possible titles
 
         for (uint16_t i = 0; i < this->max_tracks; ++i) {
             uint16_t j = random(0, this->max_tracks);   // find another random position
@@ -1509,7 +1509,7 @@ class PlaybackMode : public DefaultMode
             return false;
 
         settings->volume--;
-        mp3_player->increaseVolume();
+        mp3_player->decreaseVolume();
 
         return true;
     }
