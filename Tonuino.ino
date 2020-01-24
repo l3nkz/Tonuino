@@ -1778,6 +1778,11 @@ void setup()
     serial_event.listen(&serial_event_handler);
     mgr.add(&serial_event);
 
+    RFIDCard last_card;
+    if (settings->last_card(last_card))
+        mode = mode->switch_to<PlaybackMode>(last_card);
+    else
+        mode = mode->switch_to<StandbyMode>();
 }
 
 void loop()
