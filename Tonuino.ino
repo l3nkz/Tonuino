@@ -1820,6 +1820,15 @@ void setup()
     mode = new DefaultMode();
 #endif
 
+    /* Setup the input type for the buttons to INPUT_PULLUP */
+    pinMode(PLAY_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(NEXT_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(PREV_BUTTON_PIN, INPUT_PULLUP);
+#ifdef FIVEBUTTONS
+    pinMode(VOLUP_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(VOLDOWN_BUTTON_PIN, INPUT_PULLUP);
+#endif
+
     /* Register event handlers and insert the events to the event manager */
     play_pause_event.listen(&play_pause_handler);
     mgr.add(&play_pause_event);
