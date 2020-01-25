@@ -564,8 +564,8 @@ class MP3Notification
    public:
     static void OnError(uint16_t ec)
     {
-        Serial.println(F("DFMiniPlayer encountered an error:"));
-        Serial.print(ec);
+        Serial.print(F("DFMiniPlayer encountered an error:"));
+        Serial.println(ec);
     }
 
     static void OnPlayFinished(uint16_t track)
