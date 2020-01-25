@@ -681,6 +681,11 @@ class RFIDReader
         mfrc522.PCD_Init(); // Init MFRC522
     }
 
+    void dump_data()
+    {
+        mfrc522.PCD_DumpVersionToSerial();
+    }
+
     bool read_card(RFIDCard &card)
     {
         MFRC522::PICC_Type mifare_type = mfrc522.PICC_GetType(mfrc522.uid.sak);
@@ -1800,6 +1805,7 @@ void setup()
     rfid_reader = new RFIDReader(RFID_SS_PIN, RFID_RST_PIN);
     rfid_reader->begin();
     Serial.println(F("Setting up RFIDReader - done"));
+    rfid_reader->dump_data();
 
     mp3_player->setVolume(settings->volume);
     mp3_player->setEq(DfMp3_Eq_Normal);
