@@ -94,6 +94,10 @@ static const uint32_t STANDBY_TIME_MS = 600000;     // == 10 minutes
 /* The duration the system waits before stopping a paused playback */
 static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
 
+/* The duration the system waits before exiting from the admin menu
+   when there is no further input */
+static const uint32_t ABORT_MENU_MS = 60000;        // == 1 minute
+
 #ifdef STATUS_LED
 /* How long the system should wait between consecutive outputs of
    the current battery voltage. */
@@ -1645,13 +1649,442 @@ class PlaybackMode : public DefaultMode
 
 class AdminMode : public DefaultMode
 {
+   private:
+    class Menu
+    {
+       protected:
+        Menu *parent;
+
+        Menu(Menu *parent) : parent{parent}
+        {}
+
+        virtual Menu* _done() { return nullptr; }
+
+       public:
+        virtual ~Menu() = default;
+
+        virtual void activate() {}
+
+        virtual void next() {}
+        virtual void prev() {}
+        virtual void volume_up() {}
+        virtual void volume_down() {}
+
+        virtual void track_finished() {}
+        virtual void new_card() {}
+
+        Menu* done()
+        {
+            Menu *n = _done();
+            if (!n) {
+                n = parent;
+                delete this;
+            }
+
+            if (n)
+                n->activate();
+
+            return n;
+        }
+
+        Menu* abort()
+        {
+            Menu *p = parent;
+            delete this;
+
+            if (p)
+                p->activate();
+
+            return p;
+        }
+    };
+
+    template<class T>
+    class SelectMenu : public Menu
+    {
+       private:
+        T cur;
+        T minimum;
+        T maximum;
+
+        T *dest;
+        bool play;
+
+       protected:
+        Menu* _done()
+        {
+            *dest = cur;
+            return nullptr;
+        }
+
+        void reset(T start, T minimum, T maximum)
+        {
+            cur = start;
+            minimum = minimum;
+            maximum = maximum;
+        }
+
+       public:
+        SelectMenu(Menu *parent, T start, T minimum, T maximum, T* dest, bool play=true) : Menu{parent},
+            cur{start}, minimum{minimum}, maximum{maximum}, dest{dest}, play{play}
+        {}
+
+        void activate()
+        {
+            Serial.print(F("Please choose between "));
+            Serial.print(minimum);
+            Serial.print(F(" and "));
+            Serial.print(maximum);
+            Serial.print(F(" (current: "));
+            Serial.print(cur);
+            Serial.println(F(")"));
+        }
+
+        void next()
+        {
+            if (cur == maximum)
+                cur = minimum;
+            else
+                cur++;
+
+            if (play) {
+                Serial.print(F("current: "));
+                Serial.println(cur);
+            }
+        }
+
+        void volume_up()
+        {
+            bool p = play;
+            play = false;
+
+            for (int i = 0; i < 10; ++i)
+                next();
+
+            play = p;
+            if (play) {
+                Serial.print(F("current: "));
+                Serial.println(cur);
+            }
+        }
+
+        void prev()
+        {
+            if (cur == minimum)
+                cur = maximum;
+            else
+                cur--;
+
+            if (play) {
+                Serial.print(F("current: "));
+                Serial.println(cur);
+            }
+        }
+
+        void volume_down()
+        {
+            bool p = play;
+            play = false;
+
+            for (int i = 0; i < 10; ++i)
+                prev();
+
+            play = p;
+            if (play) {
+                Serial.print(F("current: "));
+                Serial.println(cur);
+            }
+        }
+    };
+
+    class ProgramCardMenu : public SelectMenu<uint8_t>
+    {
+       private:
+        enum Steps : int {
+            ChooseFolder,
+            ChooseMode,
+            ChooseSpecial,
+            ChooseSpecial2,
+            WaitForCard,
+            ProgramCard,
+        };
+
+        Steps step;
+        uint8_t value;
+
+        uint8_t folder;
+        RFIDCard::Mode mode;
+        uint8_t special;
+        uint8_t special2;
+
+        void done_choose_folder()
+        {
+            SelectMenu::_done();
+
+            folder = value;
+
+            reset(static_cast<uint8_t>(RFIDCard::Mode::ALBUM),
+                  static_cast<uint8_t>(RFIDCard::Mode::ALBUM),
+                  static_cast<uint8_t>(RFIDCard::Mode::AUDIOBOOK));
+            step = ChooseMode;
+        }
+
+        void done_choose_mode()
+        {
+            SelectMenu::_done();
+
+            mode = static_cast<RFIDCard::Mode>(value);
+            switch (mode) {
+                case RFIDCard::Mode::ALBUM:
+                case RFIDCard::Mode::PARTY:
+                case RFIDCard::Mode::AUDIOBOOK:
+                    step = WaitForCard;
+                    break;
+                case RFIDCard::Mode::ONE:
+                    reset(0,0,100);
+                    step = ChooseSpecial;
+                    break;
+            }
+        }
+
+        void done_choose_special()
+        {
+            SelectMenu::_done();
+
+            special = value;
+            switch (mode) {
+                default:
+                    step = WaitForCard;
+                    break;
+            }
+        }
+
+        void done_choose_special2()
+        {
+            SelectMenu::_done();
+
+            special = value;
+            step = WaitForCard;
+        }
+
+        void program_card()
+        {
+            RFIDCard card;
+            card.folder = folder;
+            card.mode = mode;
+            card.special = special;
+            card.special2 = special2;
+
+            if (!rfid_reader->write_card(card))
+                Serial.println(F("Failed to program card"));
+            else
+                Serial.println(F("Card programmed successfully"));
+        }
+
+        Menu* _done()
+        {
+            switch (step) {
+                case ChooseFolder:
+                    done_choose_folder();
+                    return this;
+                case ChooseMode:
+                    done_choose_mode();
+                    return this;
+                case ChooseSpecial:
+                    done_choose_special();
+                    return this;
+                case ChooseSpecial2:
+                    done_choose_special2();
+                    return this;
+                case WaitForCard:
+                    Serial.println(F("Still waiting for the RFID card"));
+                    return this;
+                case ProgramCard:
+                    program_card();
+                    return nullptr;
+            }
+
+            return nullptr;
+        }
+
+       public:
+        ProgramCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 100, &value), step{Steps::ChooseFolder},
+            value{0}, folder{0}, mode{RFIDCard::Mode::ALBUM}, special{0}, special2{0}
+        {}
+
+        void activate()
+        {
+            switch(step) {
+                case ChooseFolder:
+                    Serial.println(F("Choose the folder"));
+                    break;
+                case ChooseMode:
+                    Serial.println(F("Choose the playback mode"));
+                    break;
+                case ChooseSpecial:
+                    Serial.println(F("Choose the special value"));
+                    break;
+                case ChooseSpecial2:
+                    Serial.println(F("Choose the second special value"));
+                    break;
+                case WaitForCard:
+                    Serial.println(F("Waiting for RFID card"));
+                    break;
+            }
+
+            SelectMenu::activate();
+        }
+
+        void new_card()
+        {
+            if (step == WaitForCard) {
+                Serial.println(F("Now press enter to program this card."));
+                step = ProgramCard;
+            }
+        }
+    };
+
+    class MainMenu : public SelectMenu<int>
+    {
+       private:
+        enum Items : int {
+            Exit = 0,
+            MinVolume = 1,
+            MaxVolume = 2,
+            ProgramCard = 3,
+        };
+
+        int submenu;
+
+        Menu* _done() {
+            SelectMenu::_done();
+
+            Menu *next = nullptr;
+            switch (static_cast<Items>(submenu)) {
+                case Exit:
+                    break;
+                case MinVolume:
+                    next = new SelectMenu<uint8_t>(this, settings->min_volume, 0, settings->max_volume, &settings->min_volume);
+                    break;
+                case MaxVolume:
+                    next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume);
+                    break;
+                case ProgramCard:
+                    next = new ProgramCardMenu(this);
+                    break;
+            }
+
+            return next;
+        }
+
+        void activate()
+        {
+            reset(0, 0, 3);
+            SelectMenu::activate();
+        }
+
+       public:
+        MainMenu() : SelectMenu(nullptr, 0, 0, 4, &submenu)
+        {}
+    };
+
+   private:
+    Menu *menu;
+    TimerEvent abort_timer;
+    EventHandler timer_handler;
+
    public:
-    AdminMode(DefaultMode *current) : DefaultMode{current}
+    AdminMode(DefaultMode *current) : DefaultMode{current}, menu{nullptr},
+        abort_timer{ABORT_MENU_MS}, timer_handler{[]() -> bool { return mode->timer(); }}
     {
         Serial.println(F("Started Admin mode"));
+
+        abort_timer.listen(&timer_handler);
+        mgr.add(&abort_timer);
+
+        menu = new MainMenu();
+        menu->activate();
     }
 
-    /* TODO */
+    ~AdminMode()
+    {
+        if (menu)
+            delete menu;
+        mgr.remove(&abort_timer);
+    }
+
+    bool play() 
+    {
+        abort_timer.reset();
+        menu = menu->done();
+        if (!menu)
+            mode = switch_to<StandbyMode>();
+
+        return true;
+    }
+
+    bool stop()
+    {
+        abort_timer.reset();
+        menu = menu->abort();
+        if (!menu)
+            mode = switch_to<StandbyMode>();
+
+        return true;
+    }
+
+    bool next()
+    {
+        menu->next();
+
+        abort_timer.reset();
+        return true;
+    }
+
+    bool prev()
+    {
+        menu->prev();
+
+        abort_timer.reset();
+        return true;
+    }
+
+    bool volume_up()
+    {
+        menu->volume_up();
+
+        abort_timer.reset();
+        return true;
+    }
+
+    bool volume_down()
+    {
+        menu->volume_down();
+
+        abort_timer.reset();
+        return true;
+    }
+
+    bool track_finished()
+    {
+        menu->track_finished();
+        return true;
+    }
+
+    bool new_card()
+    {
+        menu->new_card();
+        return true;
+    }
+
+    bool timer()
+    {
+        menu = menu->abort();
+        if (!menu)
+            mode = switch_to<StandbyMode>();
+
+        return true;
+    }
 };
 
 
