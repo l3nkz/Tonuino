@@ -1392,6 +1392,7 @@ bool handle_serial_event()
             /* NextButton long */
             case 'N': success &= mode->volume_up(); break;
 #endif
+            case 'a': success &= mode->admin_mode(); break;
         }
     }
 
