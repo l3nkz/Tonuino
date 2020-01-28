@@ -1082,20 +1082,20 @@ static RFIDReader *rfid_reader;
 static Settings *settings;
 
 
-#ifdef USE_SHUTDOWN_PIN
+#if defined(USE_SHUTDOWN_PIN)
 /***
  * Class that implements the necessary features in combination with the
  * shutdown pin scenario. Within its constructor it will set to pin to HIGH
  * or LOW and the corresponding shutdown() function will reset the pin again.
  ***/
 template <int MODE>
-class ShutdownManager
+class PinShutdownMode
 {
    private:
     byte shutdown_pin;
 
    public:
-    ShutdownManager(byte pin) : shutdown_pin{pin}
+    PinShutdownMode(byte pin) : shutdown_pin{pin}
     {
         pinMode(shutdown_pin, OUTPUT);
         digitalWrite(shutdown_pin, MODE);
@@ -1107,7 +1107,20 @@ class ShutdownManager
     }
 };
 
-using SDManager = ShutdownManager<HIGH>;
+using SDMode = PinShutdownMode<HIGH>;
+#elif defined(USE_SLEEP_MODE)
+class SleepShutdownMode
+{
+   public:
+    void shutdown()
+    {
+        set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+        cli();
+        sleep_mode();
+    }
+};
+
+using SDMode = SleepShutdownMode;
 #endif
 
 
@@ -1339,9 +1352,11 @@ class RepeatOnePlayerMode : public PlayerMode
 static EventManager mgr;
 static DefaultMode *mode;
 
-#ifdef USE_SHUTDOWN_PIN
+#if defined(USE_SHUTDOWN_PIN)
 /* The shutdown manager should be created as soon as possible during bootup */
-static SDManager sd_manager(SHUTDOWN_PIN);
+static SDMode sd_mode(SHUTDOWN_PIN);
+#elif defined(USE_SLEEP_MODE)
+static SDMode sd_mode;
 #endif
 
 
@@ -1363,14 +1378,10 @@ void shutdown()
     delete settings;
 
     /* Depending on your setup you either want to enter sleep mode
-       or use the shutdown pin to shutdown the whole system */
-#ifdef USE_SLEEP_MODE
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    cli();
-    sleep_mode();
-#elif defined USE_SHUTDOWN_PIN
-    sd_manager.shutdown();
-#endif
+       or use the shutdown pin to shutdown the whole system.
+       Which one will be used depends on the previously configured
+       shutdown mode. */
+    sd_mode.shutdown();
 }
 
 /* Method to dispatch input from the serial */
