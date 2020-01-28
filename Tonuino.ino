@@ -199,7 +199,7 @@ class EventManager
         }
 
         Serial.print(F("Event removed: "));
-        Serial.println(reinterpret_cast<uint8_t>(e), HEX);
+        Serial.println(reinterpret_cast<uint16_t>(e), HEX);
 
         return *this;
     }
