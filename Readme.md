@@ -40,8 +40,8 @@ overview about the finished features.
    * [x] Read RFID cards (same format as original code)
    * [x] Write RFID cards (same format as original code)
  * [ ] Admin mode
-   * [ ] Program new cards
-   * [ ] min/max volume
+   * [x] Program new cards
+   * [x] min/max volume
    * [ ] Pin code
    * [ ] Admin card
    * [ ] Math question to unlock
