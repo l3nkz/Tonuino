@@ -515,8 +515,10 @@ class NewRFIDCardEvent : public Event
     RFIDReader *reader;
 
    public:
-    NewRFIDCardEvent(RFIDReader *reader) : reader{reader}
+    NewRFIDCardEvent() : reader{nullptr}
     {}
+
+    void rfid_reader(RFIDReader *r) { reader = r; }
 
     void check_and_handle(uint32_t ms);
 };
@@ -2118,7 +2120,7 @@ static ButtonLongPressedEvent voldown_event(&prev_button);
 
 static AdminModeEvent admin_event(&play_button, &next_button, &prev_button);
 
-static NewRFIDCardEvent new_card_event(rfid_reader);
+static NewRFIDCardEvent new_card_event;
 static TrackFinishedEvent track_finished_event;
 TrackFinishedEvent *MP3Notification::e = &track_finished_event; // We need to give the MP3Notification callback class a reference to
                                                                 // our TrackFinishedEvent, so that it can be properly handled in the
@@ -2284,6 +2286,8 @@ void setup()
 
     track_finished_event.listen(&track_finished_handler);
     mgr.add(&track_finished_event);
+
+    new_card_event.rfid_reader(rfid_reader);
     new_card_event.listen(&new_card_handler);
     mgr.add(&new_card_event);
 
