@@ -687,7 +687,7 @@ class RFIDReader
         mfrc522.PCD_Init(); // Init MFRC522
     }
 
-    void dump_data()
+    void print_version()
     {
         mfrc522.PCD_DumpVersionToSerial();
     }
@@ -776,13 +776,7 @@ class RFIDReader
 
     bool card_available()
     {
-        if (!mfrc522.PICC_IsNewCardPresent())
-            return false;
-
-        if (!mfrc522.PICC_ReadCardSerial())
-            return false;
-
-        return true;
+        return (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial());
     }
 
     void shutdown()
@@ -794,10 +788,8 @@ class RFIDReader
 
 void NewRFIDCardEvent::check_and_handle(uint32_t ms)
 {
-    if (reader->card_available()) {
-        Serial.println(F("New RFID card available"));
+    if (reader && reader->card_available())
         this->call_handlers();
-    }
 }
 
 /****
@@ -2238,9 +2230,10 @@ void setup()
     Serial.println(F("Setting up MP3 player - done"));
 
     rfid_reader = new RFIDReader(RFID_SS_PIN, RFID_RST_PIN);
+
     rfid_reader->begin();
     Serial.println(F("Setting up RFIDReader - done"));
-    rfid_reader->dump_data();
+    rfid_reader->print_version();
 
     mp3_player->setVolume(settings->volume);
     mp3_player->setEq(DfMp3_Eq_Normal);
