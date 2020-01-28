@@ -1103,6 +1103,36 @@ static MP3Player *mp3_player;
 static RFIDReader *rfid_reader;
 static Settings *settings;
 
+
+#ifdef USE_SHUTDOWN_PIN
+/***
+ * Class that implements the necessary features in combination with the
+ * shutdown pin scenario. Within its constructor it will set to pin to HIGH
+ * or LOW and the corresponding shutdown() function will reset the pin again.
+ ***/
+template <int MODE>
+class ShutdownManager
+{
+   private:
+    byte shutdown_pin;
+
+   public:
+    ShutdownManager(byte pin) : shutdown_pin{pin}
+    {
+        pinMode(shutdown_pin, OUTPUT);
+        digitalWrite(shutdown_pin, MODE);
+    }
+
+    void shutdown()
+    {
+        pinMode(shutdown_pin, INPUT);
+    }
+};
+
+using SDManager = ShutdownManager<HIGH>;
+#endif
+
+
 /***
  * Generic interface for the different playback modes
  ***/
@@ -1331,6 +1361,12 @@ class RepeatOnePlayerMode : public PlayerMode
 static EventManager mgr;
 static DefaultMode *mode;
 
+#ifdef USE_SHUTDOWN_PIN
+/* The shutdown manager should be created as soon as possible during bootup */
+static SDManager sd_manager(SHUTDOWN_PIN);
+#endif
+
+
 /* Free standing functions required for system management */
 
 /* Shutting down the system */
@@ -1355,7 +1391,7 @@ void shutdown()
     cli();
     sleep_mode();
 #elif defined USE_SHUTDOWN_PIN
-    pinMode(SHUTDOWN_PIN, INPUT);
+    sd_manager.shutdown();
 #endif
 }
 
@@ -2205,13 +2241,6 @@ static EventHandler serial_event_handler(handle_serial_event);
 /* Arduino specific functions */
 void setup()
 {
-#ifdef USE_SHUTDOWN_PIN
-    /* If we use the shutdown pin to turn off the device, first thing we have to do
-       is taking it down to low value so that the pass transistor will stay open */
-    pinMode(SHUTDOWN_PIN, OUTPUT);
-    digitalWrite(SHUTDOWN_PIN, LOW);
-#endif
-
     /* Startup our serial */
     Serial.begin(115200);
 
