@@ -117,52 +117,19 @@ void shutdown();
  ****/
 using callback_func = bool(*)();
 
-class EventHandler
-{
-   private:
-    EventHandler *next;
-
-    callback_func func;
-
-    friend class Event;
-
-   public:
-    EventHandler(const callback_func &f) : next{nullptr}, func{f} {}
-
-    virtual ~EventHandler() = default;
-
-    virtual bool handle() { return func(); }
-};
-
 class Event
 {
-   private:
+   protected:
     Event *next;
 
-    EventHandler *handlers;
+    callback_func handle;
 
     friend class EventManager;
 
    public:
-    Event() : next{nullptr}, handlers{nullptr} {}
+    Event(const callback_func &f) : next{nullptr}, handle{f} {}
 
     virtual ~Event() = default;
-
-    Event& listen(EventHandler *h) 
-    {
-        h->next = handlers;
-        handlers = h;
-
-        return *this;
-    }
-
-   protected:
-    void call_handlers()
-    {
-        for (EventHandler *h = handlers; h; h = h->next)
-            if (h->handle())
-                break;
-    }
 
    public:
     virtual void check_and_handle(uint32_t ts) = 0;
@@ -301,13 +268,15 @@ class ButtonPressedEvent : public Event
     ButtonWrapper *bt;
 
    public:
-    ButtonPressedEvent(ButtonWrapper *bt) : bt{bt} {}
+    ButtonPressedEvent(ButtonWrapper *bt, const callback_func &f) : Event{f}, bt{bt} {}
 
     void check_and_handle(uint32_t ms)
     {
         bt->read();
-        if (bt->wasReleased())
-            this->call_handlers();
+        if (bt->wasReleased()) {
+            Serial.println(F("Bt was pressed"));
+            this->handle();
+        }
     }
 
     void clear()
@@ -323,15 +292,17 @@ class ButtonLongPressedEvent : public Event
     uint32_t long_press_ms;
 
    public:
-    ButtonLongPressedEvent(ButtonWrapper *bt, uint32_t long_press_ms = LONG_PRESS_MS)
-        : bt{bt}, long_press_ms{long_press_ms} 
+    ButtonLongPressedEvent(ButtonWrapper *bt, const callback_func &f, uint32_t long_press_ms = LONG_PRESS_MS)
+        : Event{f}, bt{bt}, long_press_ms{long_press_ms}
     {}
 
     void check_and_handle(uint32_t ms)
     {
         bt->read();
-        if (bt->pressedFor(long_press_ms))
-            this->call_handlers();
+        if (bt->pressedFor(long_press_ms)) {
+            Serial.println(F("Bt was long pressed"));
+            this->handle();
+        }
     }
 
     void clear()
@@ -347,8 +318,9 @@ class AdminModeEvent : public Event
     uint32_t long_press_ms;
 
    public:
-    AdminModeEvent(ButtonWrapper *play, ButtonWrapper *next, ButtonWrapper *prev, uint32_t long_press_ms = LONG_PRESS_MS)
-        : play{play}, next{next}, prev{prev}, long_press_ms{long_press_ms}
+    AdminModeEvent(ButtonWrapper *play, ButtonWrapper *next, ButtonWrapper *prev, const callback_func &f,
+                   uint32_t long_press_ms = LONG_PRESS_MS)
+        : Event{f}, play{play}, next{next}, prev{prev}, long_press_ms{long_press_ms}
     {}
 
     void check_and_handle(uint32_t ms)
@@ -357,7 +329,7 @@ class AdminModeEvent : public Event
         next->read();
         prev->read();
         if (play->pressedFor(long_press_ms) && next->pressedFor(long_press_ms) && prev->pressedFor(long_press_ms))
-            this->call_handlers();
+            this->handle();
     }
 
     void clear()
@@ -457,7 +429,8 @@ class AnalogEvent : public Event
     Trigger<Comperator<int>> trigger;
 
    public:
-    AnalogEvent(int pin, int reference) : pin{pin}, trigger{reference}
+    AnalogEvent(int pin, int reference, const callback_func &f) : Event{f},
+        pin{pin}, trigger{reference}
     {}
 
     void check_and_handle(uint32_t ms)
@@ -465,7 +438,7 @@ class AnalogEvent : public Event
         int val = analogRead(pin);
 
         if (trigger.triggered(val))
-            this->call_handlers();
+            this->handle();
     }
 };
 
@@ -477,7 +450,8 @@ class TimerEvent : public Event
     uint32_t next_ms;
 
    public:
-    TimerEvent(uint32_t duration, bool repeated=false) : duration{duration}, repeated{repeated}, next_ms{0}
+    TimerEvent(uint32_t duration, const callback_func &f, bool repeated=false) : Event{f},
+        duration{duration}, repeated{repeated}, next_ms{0}
     {
         next_ms = millis() + duration;
         Serial.print(F("Create timer to fire at "));
@@ -487,7 +461,7 @@ class TimerEvent : public Event
     void check_and_handle(uint32_t ms)
     {
         if (next_ms != 0 && ms >= next_ms) {
-            this->call_handlers();
+            this->handle();
 
             if (repeated)
                 next_ms += duration;
@@ -515,7 +489,7 @@ class NewRFIDCardEvent : public Event
     RFIDReader *reader;
 
    public:
-    NewRFIDCardEvent() : reader{nullptr}
+    NewRFIDCardEvent(const callback_func &f) : Event{f}, reader{nullptr}
     {}
 
     void rfid_reader(RFIDReader *r) { reader = r; }
@@ -530,7 +504,7 @@ class TrackFinishedEvent : public Event
     uint16_t last_track;
 
    public:
-    TrackFinishedEvent() : triggered{false}, last_track{0}
+    TrackFinishedEvent(const callback_func &f) : Event{f}, triggered{false}, last_track{0}
     {}
 
     void trigger(uint16_t track)
@@ -542,7 +516,7 @@ class TrackFinishedEvent : public Event
     void check_and_handle(uint32_t ms)
     {
         if (triggered)
-            this->call_handlers();
+            this->handle();
     }
 
     void clear() { triggered = false; }
@@ -551,10 +525,13 @@ class TrackFinishedEvent : public Event
 class SerialEvent : public Event
 {
    public:
+    SerialEvent(const callback_func &f) : Event{f}
+    {}
+
     void check_and_handle(uint32_t ms)
     {
         if (Serial.available() > 0)
-            this->call_handlers();
+            this->handle();
     }
 };
 
@@ -788,8 +765,9 @@ class RFIDReader
 
 void NewRFIDCardEvent::check_and_handle(uint32_t ms)
 {
-    if (reader && reader->card_available())
-        this->call_handlers();
+    if (reader && reader->card_available()) {
+        this->handle();
+    }
 }
 
 /****
@@ -1446,17 +1424,15 @@ class StandbyMode : public DefaultMode
 {
    private:
     TimerEvent standby_timer;
-    EventHandler timer_handler;
 
    public:
       /* "Copy"-constructor so that we can extract the necessary state from the currently
        active mode, instead of building it from scratch again. */
-    StandbyMode(DefaultMode *current) : DefaultMode{current}, standby_timer{STANDBY_TIME_MS},
-        timer_handler{[]() -> bool { return mode->timer(); }}
+    StandbyMode(DefaultMode *current) : DefaultMode{current},
+        standby_timer{STANDBY_TIME_MS, []() -> bool { return mode->timer(); }}
     {
         Serial.println(F("Started Standby mode"));
 
-        standby_timer.listen(&timer_handler);
         mgr.add(&standby_timer);
     }
 
@@ -1513,7 +1489,6 @@ class PlaybackMode : public DefaultMode
 
     bool timer_active;
     TimerEvent abort_timer;
-    EventHandler timer_handler;
 
     void set_play_mode(const RFIDCard &card)
     {
@@ -1557,11 +1532,9 @@ class PlaybackMode : public DefaultMode
 
    public:
     PlaybackMode(DefaultMode *current, const RFIDCard &card) : DefaultMode{current}, pmode{nullptr},
-        timer_active{false}, abort_timer{STOP_PLAYBACK_MS}, timer_handler{[]() -> bool { return mode->timer(); }}
+        timer_active{false}, abort_timer{STOP_PLAYBACK_MS, []() -> bool { return mode->timer(); }}
     {
         Serial.println(F("Started Playback mode"));
-
-        abort_timer.listen(&timer_handler);
 
         set_play_mode(card);
         pmode->play();
@@ -2022,15 +1995,13 @@ class AdminMode : public DefaultMode
    private:
     Menu *menu;
     TimerEvent abort_timer;
-    EventHandler timer_handler;
 
    public:
     AdminMode(DefaultMode *current) : DefaultMode{current}, menu{nullptr},
-        abort_timer{ABORT_MENU_MS}, timer_handler{[]() -> bool { return mode->timer(); }}
+        abort_timer{ABORT_MENU_MS, []() -> bool { return mode->timer(); }}
     {
         Serial.println(F("Started Admin mode"));
 
-        abort_timer.listen(&timer_handler);
         mgr.add(&abort_timer);
 
         menu = new MainMenu();
@@ -2134,23 +2105,29 @@ static ButtonWrapper voldown_button(VOLDOWN_BUTTON_PIN);
 #endif
 
 /* Events */
-static ButtonPressedEvent play_pause_event(&play_button);
-static ButtonLongPressedEvent stop_event(&play_button);
-static ButtonPressedEvent next_event(&next_button);
-static ButtonPressedEvent prev_event(&prev_button);
+static ButtonPressDispatcher play_button_dispatcher([]() -> bool {return mode->play(); }, []() -> bool { return mode->stop(); });
+static ButtonPressedEvent play_pause_event(&play_button, []() -> bool { return play_button_dispatcher.short_pressed(); });
+static ButtonLongPressedEvent stop_event(&play_button, []() -> bool { return play_button_dispatcher.long_pressed(); });
 
 #ifdef FIVEBUTTONS
-static ButtonPressedEvent volup_event(&volup_button);
-static ButtonPressedEvent voldown_event(&voldown_button);
+static ButtonPressedEvent next_event(&next_button, []() -> bool { return mode->next(); });
+static ButtonPressedEvent prev_event(&prev_button, []() -> bool { return mode->prev(); });
+static ButtonPressedEvent volup_event(&volup_button, []() -> bool { return mode->volume_up(); });
+static ButtonPressedEvent voldown_event(&voldown_button, []() -> bool { return mode->volume_down(); });
 #else
-static ButtonLongPressedEvent volup_event(&next_button);
-static ButtonLongPressedEvent voldown_event(&prev_button);
+static ButtonPressDispatcher next_button_dispatcher([]() -> bool { return mode->next(); }, []() -> bool { return mode->volume_up(); });
+static ButtonPressedEvent next_event(&next_button, []() -> bool { return next_button_dispatcher.short_pressed(); });
+static ButtonLongPressedEvent volup_event(&next_button, []() -> bool { return next_button_dispatcher.long_pressed(); });
+
+static ButtonPressDispatcher prev_button_dispatcher([]() -> bool { return mode->prev(); }, []() -> bool { return mode->volume_down(); });
+static ButtonPressedEvent prev_event(&prev_button, []() -> bool { return prev_button_dispatcher.short_pressed(); });
+static ButtonLongPressedEvent voldown_event(&prev_button, []() -> bool { return prev_button_dispatcher.long_pressed(); });
 #endif
 
-static AdminModeEvent admin_event(&play_button, &next_button, &prev_button);
+static AdminModeEvent admin_event(&play_button, &next_button, &prev_button, []() -> bool { return mode->admin_mode(); });
 
-static NewRFIDCardEvent new_card_event;
-static TrackFinishedEvent track_finished_event;
+static NewRFIDCardEvent new_card_event([]() -> bool { return mode->new_card(); });
+static TrackFinishedEvent track_finished_event([]() -> bool { return mode->track_finished(); });
 TrackFinishedEvent *MP3Notification::e = &track_finished_event; // We need to give the MP3Notification callback class a reference to
                                                                 // our TrackFinishedEvent, so that it can be properly handled in the
                                                                 // event loop.
@@ -2181,43 +2158,12 @@ constexpr int battery_event_reference_value(float battery_voltage)
     return (battery_voltage / factor) * (1023 / ref_voltage);
 }
 
-static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, battery_event_reference_value(3.5) + 2);
-static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, battery_event_reference_value(3.5));
-static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0));
-
-static TimerEvent voltage_print_event(PRINT_VOLTAGE_MS, true);
-#endif
-
-static SerialEvent serial_event;
-
-/* Event handlers */
-static ButtonPressDispatcher play_button_dispatcher([]() -> bool {return mode->play(); }, []() -> bool { return mode->stop(); });
-static EventHandler play_pause_handler([]() -> bool { return play_button_dispatcher.short_pressed(); });
-static EventHandler stop_handler([]() -> bool { return play_button_dispatcher.long_pressed(); });
-
-#ifdef FIVEBUTTONS
-static EventHandler next_handler([]() -> bool { return mode->next(); });
-static EventHandler prev_handler([]() -> bool { return mode->prev(); });
-static EventHandler volup_handler([]() -> bool { return mode->volume_up(); });
-static EventHandler voldown_handler([]() -> bool { return mode->volume_down(); });
-#else
-static ButtonPressDispatcher next_button_dispatcher([]() -> bool { return mode->next(); }, []() -> bool { return mode->volume_up(); });
-static EventHandler next_handler([]() -> bool { return next_button.short_pressed(); });
-static EventHandler volup_handler([]() -> bool { return next_button.long_pressed(); });
-
-static ButtonPressDispatcher prev_button_dispatcher([]() -> bool { return mode->prev(); }, []() -> bool { return mode->volume_down(); });
-static EventHandler prev_handler([]() -> bool { return next_button.short_pressed(); });
-static EventHandler voldown_handler([]() -> bool { return next_button.long_pressed(); });
-#endif
-
-static EventHandler admin_handler([]() -> bool { return mode->admin_mode(); });
-static EventHandler new_card_handler([]() -> bool { return mode->new_card(); });
-static EventHandler track_finished_handler([]() -> bool { return mode->track_finished(); });
-
-#ifdef STATUS_LED
-static EventHandler battery_high_handler([]() -> bool { return mode->battery_high(); });
-static EventHandler battery_low_handler([]() -> bool { return mode->battery_low(); });
-static EventHandler battery_critical_handler([]() -> bool { return mode->battery_critical(); });
+static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, battery_event_reference_value(3.5) + 2,
+    []() -> bool { return mode->battery_high(); });
+static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, battery_event_reference_value(3.5),
+    []() -> bool { return mode->battery_low(); });
+static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0),
+    []() -> bool { return mode->battery_critical(); });
 
 bool print_battery_voltage()
 {
@@ -2233,10 +2179,11 @@ bool print_battery_voltage()
     return true;
 
 }
-static EventHandler voltage_print_handler(&print_battery_voltage);
+static TimerEvent voltage_print_event(PRINT_VOLTAGE_MS, print_battery_voltage, true);
 #endif
 
-static EventHandler serial_event_handler(handle_serial_event);
+static SerialEvent serial_event(handle_serial_event);
+
 
 /* Arduino specific functions */
 void setup()
@@ -2288,48 +2235,30 @@ void setup()
 #endif
 
     /* Register event handlers and insert the events to the event manager */
-    play_pause_event.listen(&play_pause_handler);
     mgr.add(&play_pause_event);
-
-    stop_event.listen(&stop_handler);
     mgr.add(&stop_event);
 
-    next_event.listen(&next_handler);
     mgr.add(&next_event);
-    prev_event.listen(&prev_handler);
     mgr.add(&prev_event);
-
-    volup_event.listen(&volup_handler);
     mgr.add(&volup_event);
-    voldown_event.listen(&voldown_handler);
     mgr.add(&voldown_event);
 
-    admin_event.listen(&admin_handler);
     mgr.add(&admin_event);
-
-    track_finished_event.listen(&track_finished_handler);
     mgr.add(&track_finished_event);
 
     new_card_event.rfid_reader(rfid_reader);
-    new_card_event.listen(&new_card_handler);
     mgr.add(&new_card_event);
 
 #ifdef STATUS_LED
     pinMode(VOLTAGE_PIN, INPUT);
     analogReference(INTERNAL);
 
-    battery_high_event.listen(&battery_high_handler);
     mgr.add(&battery_high_event);
-    battery_low_event.listen(&battery_low_handler);
     mgr.add(&battery_low_event);
-    battery_critical_event.listen(&battery_critical_handler);
     mgr.add(&battery_critical_event);
-
-    voltage_print_event.listen(&voltage_print_handler);
     mgr.add(&voltage_print_event);
 #endif
 
-    serial_event.listen(&serial_event_handler);
     mgr.add(&serial_event);
 
     RFIDCard last_card;
