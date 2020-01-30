@@ -1095,7 +1095,7 @@ class PinShutdownMode
     byte shutdown_pin;
 
    public:
-    PinShutdownMode(byte pin) : shutdown_pin{pin}
+    PinShutdownMode(byte pin = SHUTDOWN_PIN) : shutdown_pin{pin}
     {
         pinMode(shutdown_pin, OUTPUT);
         digitalWrite(shutdown_pin, MODE);
@@ -1348,16 +1348,12 @@ class RepeatOnePlayerMode : public PlayerMode
  * Specific system modes
  ***/
 
+/* The shutdown manager should be created as soon as possible during bootup */
+static SDMode sd_mode;
+
 /* Global variables required for system management */
 static EventManager mgr;
 static DefaultMode *mode;
-
-#if defined(USE_SHUTDOWN_PIN)
-/* The shutdown manager should be created as soon as possible during bootup */
-static SDMode sd_mode(SHUTDOWN_PIN);
-#elif defined(USE_SLEEP_MODE)
-static SDMode sd_mode;
-#endif
 
 
 /* Free standing functions required for system management */
