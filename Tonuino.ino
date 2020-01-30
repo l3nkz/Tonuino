@@ -1139,6 +1139,7 @@ class PlayerMode
     uint8_t cur_track;
     const uint16_t max_tracks;
     bool was_paused;
+    bool changed_track;
 
     bool play_track(uint8_t track)
     {
@@ -1170,7 +1171,7 @@ class PlayerMode
     }
 
     PlayerMode(uint8_t folder) : folder{folder}, cur_track{1},
-        max_tracks{mp3_player->getFolderTrackCount(folder)}, was_paused{false}
+        max_tracks{mp3_player->getFolderTrackCount(folder)}, was_paused{false}, changed_track{false}
     {}
 
    public:
@@ -1182,12 +1183,16 @@ class PlayerMode
             Serial.print(F("Start track "));
             Serial.println(cur_track);
             play_track(cur_track);
+        } else if (was_paused && changed_track) {
+            Serial.print(F("Resume playback at track "));
+            Serial.println(cur_track);
+            play_track(cur_track);
         } else {
-            Serial.print(F("Resume playback"));
+            Serial.println(F("Resume playback"));
             mp3_player->start();
-            was_paused = false;
         }
 
+        was_paused = changed_track = false;
         return true;
     }
 
@@ -1214,7 +1219,12 @@ class PlayerMode
         if (this->_next()) {
             Serial.print(F("Goto next track: "));
             Serial.println(cur_track);
-            return play_track(cur_track);
+            if (!was_paused) {
+                return play_track(cur_track);
+            } else {
+                changed_track = true;
+                return true;
+            }
         }
 
         return false;
@@ -1226,7 +1236,12 @@ class PlayerMode
             Serial.print(F("Goto previous track: "));
             Serial.println(cur_track);
 
-            return play_track(cur_track);
+            if (!was_paused) {
+                return play_track(cur_track);
+            } else {
+                changed_track = true;
+                return true;
+            }
         }
 
         return false;
@@ -1580,8 +1595,25 @@ class PlaybackMode : public DefaultMode
         return pmode->stop();
     }
 
-    bool next() { return pmode->next(); }
-    bool prev() { return pmode->prev(); }
+    bool next()
+    {
+        if (pmode->next()) {
+            abort_timer.reset();
+            return true;
+        }
+
+        return false;
+    }
+
+    bool prev()
+    {
+        if (pmode->prev()) {
+            abort_timer.reset();
+            return true;
+        }
+
+        return false;
+    }
 
     bool volume_up()
     {
