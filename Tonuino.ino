@@ -273,10 +273,8 @@ class ButtonPressedEvent : public Event
     void check_and_handle(uint32_t ms)
     {
         bt->read();
-        if (bt->wasReleased()) {
-            Serial.println(F("Bt was pressed"));
+        if (bt->wasReleased())
             this->handle();
-        }
     }
 
     void clear()
@@ -299,10 +297,8 @@ class ButtonLongPressedEvent : public Event
     void check_and_handle(uint32_t ms)
     {
         bt->read();
-        if (bt->pressedFor(long_press_ms)) {
-            Serial.println(F("Bt was long pressed"));
+        if (bt->pressedFor(long_press_ms))
             this->handle();
-        }
     }
 
     void clear()
@@ -454,8 +450,6 @@ class TimerEvent : public Event
         duration{duration}, repeated{repeated}, next_ms{0}
     {
         next_ms = millis() + duration;
-        Serial.print(F("Create timer to fire at "));
-        Serial.println(next_ms);
     }
 
     void check_and_handle(uint32_t ms)
@@ -474,9 +468,6 @@ class TimerEvent : public Event
     {
         /* Move the timer forward on reset */
         next_ms = millis() + duration;
-
-        Serial.print(F("Reset timer to "));
-        Serial.println(next_ms);
     }
 };
 
@@ -765,9 +756,8 @@ class RFIDReader
 
 void NewRFIDCardEvent::check_and_handle(uint32_t ms)
 {
-    if (reader && reader->card_available()) {
+    if (reader && reader->card_available())
         this->handle();
-    }
 }
 
 /****
@@ -1033,6 +1023,7 @@ class LEDMode : public Mode
 
     bool battery_high()
     {
+        Serial.println(F("Battery level is high."));
         *battery_led = CRGB::Green;
         FastLED.show();
 
@@ -1041,6 +1032,7 @@ class LEDMode : public Mode
 
     bool battery_low()
     {
+        Serial.println(F("Battery level is low"));
         *battery_led = CRGB::Red;
         FastLED.show();
 
