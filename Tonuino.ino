@@ -594,8 +594,10 @@ class RFIDCard
     bool deserialize(byte b[18])
     {
         /* Before extracting the data check the card's cookie and version */
-        uint32_t c = static_cast<uint32_t>(b[0]) << 24 || static_cast<uint32_t>(b[1]) << 16
-                  || static_cast<uint32_t>(b[2]) << 8 || static_cast<uint32_t>(b[3]);
+        uint32_t c = (static_cast<uint32_t>(b[0]) << 24) |
+                     (static_cast<uint32_t>(b[1]) << 16) |
+                     (static_cast<uint32_t>(b[2]) << 8)  |
+                     static_cast<uint32_t>(b[3]);
 
         if (c != cookie)
             return false;
