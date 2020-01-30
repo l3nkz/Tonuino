@@ -1775,8 +1775,8 @@ class AdminMode : public DefaultMode
         void reset(T start, T minimum, T maximum)
         {
             cur = start;
-            minimum = minimum;
-            maximum = maximum;
+            this->minimum = minimum;
+            this->maximum = maximum;
         }
 
        public:
