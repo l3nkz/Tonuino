@@ -930,6 +930,15 @@ class Settings
         return true;
     }
 
+    void save_last_card(const RFIDCard &card)
+    {
+        last_folder = card.folder;
+        last_mode = static_cast<uint8_t>(card.mode);
+        last_special = card.special;
+        last_special2 = card.special2;
+        last_folder_valid = true;
+    }
+
     uint8_t progress(uint8_t folder)
     {
         for (Progress *i = progresses; i; i = i->next) {
@@ -1539,6 +1548,9 @@ class PlaybackMode : public DefaultMode
     {
         Serial.println(F("Started Playback mode"));
 
+        /* Remember that we are currently playing this card in the EEPROM */
+        settings->save_last_card(card);
+
         set_play_mode(card);
         pmode->play();
     }
@@ -1631,6 +1643,10 @@ class PlaybackMode : public DefaultMode
         pmode->pause();
 
         deactivate_timer();
+
+        /* Remember that we are currently playing this card in the EEPROM */
+        settings->save_last_card(card);
+
         set_play_mode(card);
         return pmode->play();
     }
