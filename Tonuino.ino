@@ -637,8 +637,11 @@ class RFIDCard
 class RFIDReader
 {
    private:
-    static const byte block_addr = 4;
-    static const byte trailer_block = 7;
+    static const constexpr byte sector = 1;
+    static const constexpr byte auth_block = sector * 4 + 3;    // Always the last block in a 4-block sector contains
+                                                                // the authentication key.
+    static const constexpr byte data_block = sector * 4;        // We want to write our data in the first block of a
+                                                                // sector;
 
     MFRC522 mfrc522;
     MFRC522::MIFARE_Key key;
@@ -675,8 +678,8 @@ class RFIDReader
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_1K ) ||
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_4K ) )
         {
-            Serial.println(F("Authenticating Classic using key A..."));
-            status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailer_block, &key, &(mfrc522.uid));
+            Serial.println(F("Authenticating using key A"));
+            status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, auth_block, &key, &(mfrc522.uid));
         } else {
             Serial.println(F("Unsupported MIFARE type"));
             return false;
@@ -688,19 +691,19 @@ class RFIDReader
             return false;
         }
 
-        status = mfrc522.MIFARE_Read(block_addr, buffer, &size);
-        if (status != MFRC522::STATUS_OK) {
-          Serial.print(F("Read failed: "));
-          Serial.println(mfrc522.GetStatusCodeName(status));
-          return false;
-        }
-
-        bool result = card.deserialize(buffer);
+        status = mfrc522.MIFARE_Read(data_block, buffer, &size);
 
         mfrc522.PICC_HaltA();
         mfrc522.PCD_StopCrypto1();
 
-        return result;
+        if (status != MFRC522::STATUS_OK) {
+            Serial.print(F("Read failed: "));
+            Serial.println(mfrc522.GetStatusCodeName(status));
+
+            return false;
+        }
+
+        return card.deserialize(buffer);
     }
 
     bool write_card(const RFIDCard &card)
@@ -718,7 +721,7 @@ class RFIDReader
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_4K ) )
         {
             Serial.println(F("Authenticating using key A"));
-            status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailer_block, &key, &(mfrc522.uid));
+            status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, auth_block, &key, &(mfrc522.uid));
         } else {
             Serial.println(F("Unsupported MIFARE type"));
             return false;
@@ -730,18 +733,17 @@ class RFIDReader
             return false;
         }
 
-        status = mfrc522.MIFARE_Write(block_addr, buffer, 16);
+        status = mfrc522.MIFARE_Write(data_block, buffer, 16);
 
         if (status != MFRC522::STATUS_OK) {
-          Serial.print(F("Writing data to card failed: "));
-          Serial.println(mfrc522.GetStatusCodeName(status));
-          return false;
+            Serial.print(F("Writing data to card failed: "));
+            Serial.println(mfrc522.GetStatusCodeName(status));
         }
 
         mfrc522.PICC_HaltA();
         mfrc522.PCD_StopCrypto1();
 
-        return true;
+        return status == MFRC522::STATUS_OK;
     }
 
     bool card_available()
