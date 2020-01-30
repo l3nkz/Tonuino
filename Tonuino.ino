@@ -1896,7 +1896,7 @@ class AdminMode : public DefaultMode
                     step = WaitForCard;
                     break;
                 case RFIDCard::Mode::ONE:
-                    reset(0,0,100);
+                    reset(1,1,mp3_player->getFolderTrackCount(folder));
                     step = ChooseSpecial;
                     break;
             }
