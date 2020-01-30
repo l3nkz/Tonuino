@@ -44,11 +44,11 @@
 /* Update these according to your hardware setup */
 /* Pins usage for the buttons */
 #define PLAY_BUTTON_PIN A1
-#define NEXT_BUTTON_PIN A2
-#define PREV_BUTTON_PIN A3
+#define NEXT_BUTTON_PIN A3
+#define PREV_BUTTON_PIN A2
 #ifdef FIVEBUTTONS
-#define VOLUP_BUTTON_PIN A4
-#define VOLDOWN_BUTTON_PIN A5
+#define VOLUP_BUTTON_PIN A5
+#define VOLDOWN_BUTTON_PIN A4
 #endif
 
 /* Pin usage for the MP3 player module */

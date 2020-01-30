@@ -1,4 +1,4 @@
-ARDUINO_OPTIONS ?=
+ARDUINO_OPTIONS ?= --config-file arduino-cli.yaml
 TTY ?= /dev/ttyUSB0
 BAUDRATE ?= 115200
 
