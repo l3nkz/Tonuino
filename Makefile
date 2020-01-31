@@ -11,7 +11,6 @@ Tonuino.ino.arduino.avr.nano.hex: Tonuino.ino
 	arduino-cli ${ARDUINO_OPTIONS} compile -b arduino:avr:nano:cpu=atmega328old --warnings more Tonuino.ino
 
 console:
-	stty -F ${TTY} -hupcl
 	minicom -D ${TTY} -b ${BAUDRATE} -o
 
 .PHONY: upload console
