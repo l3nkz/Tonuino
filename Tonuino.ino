@@ -1533,8 +1533,6 @@ class StandbyMode : public DefaultMode
     TimerEvent standby_timer;
 
    public:
-      /* "Copy"-constructor so that we can extract the necessary state from the currently
-       active mode, instead of building it from scratch again. */
     StandbyMode(DefaultMode *current) : DefaultMode{current},
         standby_timer{STANDBY_TIME_MS, []() -> bool { return mode->timer(); }}
     {
