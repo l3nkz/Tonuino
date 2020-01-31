@@ -1042,6 +1042,9 @@ class Mode
     Mode(Mode *current)
     {}
 
+    virtual void activate() {}
+    virtual void deactivate() {}
+
    public:
     Mode() = default;
 
@@ -1062,8 +1065,12 @@ class Mode
     template <class M, class ...Args>
     Mode* switch_to(Args... args)
     {
+        deactivate();
+
         Mode *m = new M(this, args...);
         delete this;
+
+        m->activate();
 
         return m;
     }
@@ -1615,6 +1622,16 @@ class PlaybackMode : public DefaultMode
         timer_active = false;
     }
 
+    void activate()
+    {
+        pmode->play();
+    }
+
+    void deactivate()
+    {
+        pmode->pause();
+    }
+
    public:
     PlaybackMode(DefaultMode *current, const RFIDCard::Folder *folder) : DefaultMode{current}, pmode{nullptr},
         timer_active{false}, abort_timer{STOP_PLAYBACK_MS, []() -> bool { return mode->timer(); }}
@@ -1624,16 +1641,15 @@ class PlaybackMode : public DefaultMode
         /* Remember that we are currently playing this card in the EEPROM */
         settings->save_last_card(folder);
 
-        set_play_mode(card);
-        pmode->play();
+        set_play_mode(folder);
     }
 
     ~PlaybackMode()
     {
-        deactivate_timer();
-        pmode->pause();
         if (pmode)
             delete pmode;
+
+        deactivate_timer();
     }
 
     bool play()
@@ -2159,6 +2175,11 @@ class AdminMode : public DefaultMode
     Menu *menu;
     TimerEvent abort_timer;
 
+    void activate()
+    {
+        menu->activate();
+    }
+
    public:
     AdminMode(DefaultMode *current) : DefaultMode{current}, menu{nullptr},
         abort_timer{ABORT_MENU_MS, []() -> bool { return mode->timer(); }}
@@ -2166,15 +2187,14 @@ class AdminMode : public DefaultMode
         Serial.println(F("Started Admin mode"));
 
         mgr.add(&abort_timer);
-
         menu = new MainMenu();
-        menu->activate();
     }
 
     ~AdminMode()
     {
         if (menu)
             delete menu;
+
         mgr.remove(&abort_timer);
     }
 
