@@ -307,35 +307,6 @@ class ButtonLongPressedEvent : public Event
     }
 };
 
-class AdminModeEvent : public Event
-{
-   private:
-    ButtonWrapper *play, *next, *prev;
-    uint32_t long_press_ms;
-
-   public:
-    AdminModeEvent(ButtonWrapper *play, ButtonWrapper *next, ButtonWrapper *prev, const callback_func &f,
-                   uint32_t long_press_ms = LONG_PRESS_MS)
-        : Event{f}, play{play}, next{next}, prev{prev}, long_press_ms{long_press_ms}
-    {}
-
-    void check_and_handle(uint32_t ms)
-    {
-        play->read();
-        next->read();
-        prev->read();
-        if (play->pressedFor(long_press_ms) && next->pressedFor(long_press_ms) && prev->pressedFor(long_press_ms))
-            this->handle();
-    }
-
-    void clear()
-    {
-        play->clear();
-        next->clear();
-        prev->clear();
-    }
-};
-
 /* These classes are helper classes to define different types of analog events
     - edge triggered vs value triggered
     - less vs more vs equal vs ...
@@ -1086,7 +1057,6 @@ class Mode
     virtual bool track_finished() { return true; }
     virtual bool new_card() { return true; }
     virtual bool timer() { return true; }
-    virtual bool admin_mode() { return true; }
     virtual bool is_playing() { return false; }
 
     template <class M, class ...Args>
@@ -1457,6 +1427,12 @@ static EventManager mgr;
 static DefaultMode *mode;
 
 
+/* Forward declare all possible system modes */
+class StandbyMode;
+class PlaybackMode;
+class AdminMode;
+
+
 /* Free standing functions required for system management */
 
 /* Shutting down the system */
@@ -1514,18 +1490,13 @@ bool handle_serial_event()
             /* NextButton long */
             case 'N': success &= mode->volume_up(); break;
 #endif
-            case 'a': success &= mode->admin_mode(); break;
+            /* Entering Admin Mode */
+            case 'a': success = true; mode = mode->switch_to<AdminMode>(); break;
         }
     }
 
     return success;
 }
-
-
-/* Forward declare all possible system modes */
-class StandbyMode;
-class PlaybackMode;
-class AdminMode;
 
 
 class StandbyMode : public DefaultMode
@@ -1587,16 +1558,11 @@ class StandbyMode : public DefaultMode
 
             switch (s->mode) {
                 case SpecialModes::ADMIN:
-                    return admin_mode();
+                    mode = switch_to<AdminMode>();
+                    break;
             }
         }
 
-        return true;
-    }
-
-    bool admin_mode()
-    {
-        mode = switch_to<AdminMode>();
         return true;
     }
 };
@@ -1766,7 +1732,8 @@ class PlaybackMode : public DefaultMode
 
             switch (s->mode) {
                 case SpecialModes::ADMIN:
-                    return admin_mode();
+                    mode = switch_to<AdminMode>();
+                    break;
             }
         }
 
@@ -1783,12 +1750,6 @@ class PlaybackMode : public DefaultMode
     bool is_playing()
     {
         return pmode->is_playing();
-    }
-
-    bool admin_mode()
-    {
-        mode = switch_to<AdminMode>();
-        return true;
     }
 };
 
@@ -2326,8 +2287,6 @@ static ButtonPressedEvent prev_event(&prev_button, []() -> bool { return prev_bu
 static ButtonLongPressedEvent voldown_event(&prev_button, []() -> bool { return prev_button_dispatcher.long_pressed(); });
 #endif
 
-static AdminModeEvent admin_event(&play_button, &next_button, &prev_button, []() -> bool { return mode->admin_mode(); });
-
 static NewRFIDCardEvent new_card_event([]() -> bool { return mode->new_card(); });
 static TrackFinishedEvent track_finished_event([]() -> bool { return mode->track_finished(); });
 TrackFinishedEvent *MP3Notification::e = &track_finished_event; // We need to give the MP3Notification callback class a reference to
@@ -2445,7 +2404,6 @@ void setup()
     mgr.add(&volup_event);
     mgr.add(&voldown_event);
 
-    mgr.add(&admin_event);
     mgr.add(&track_finished_event);
 
     new_card_event.rfid_reader(rfid_reader);
