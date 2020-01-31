@@ -1121,8 +1121,12 @@ class LEDMode : public Mode
     template <class M, class ...Args>
     LEDMode* switch_to(Args... args)
     {
+        deactivate();
+
         LEDMode *m = new M(this, args...);
         delete this;
+
+        m->activate();
 
         return m;
     }
