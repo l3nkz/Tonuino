@@ -13,4 +13,7 @@ Tonuino.ino.arduino.avr.nano.hex: Tonuino.ino
 console:
 	minicom -D ${TTY} -b ${BAUDRATE} -o
 
-.PHONY: upload console
+clean:
+	rm -f Tonuino.ino.arduino.avr.nano.*
+
+.PHONY: upload console clean
