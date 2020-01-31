@@ -1499,6 +1499,9 @@ bool handle_serial_event()
 #endif
             /* Entering Admin Mode */
             case 'a': success = true; mode = mode->switch_to<AdminMode>(); break;
+
+            /* Shutting down the system */
+            case 's': shutdown(); break;
         }
     }
 
