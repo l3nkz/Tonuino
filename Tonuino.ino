@@ -572,24 +572,68 @@ using MP3Player = DFMiniMp3<SoftwareSerial, MP3Notification>;
 /****
  * RFID module management
  ****/
+enum class FolderModes : uint8_t {
+    ALBUM = 2,
+    PARTY = 3,
+    ONE = 4,
+    AUDIOBOOK = 5,
+};
+
+enum class SpecialModes : uint8_t {
+    ADMIN = 1,
+};
+
 class RFIDCard
 {
    private:
     static const uint32_t cookie = 0x1337b347;
-    static const byte version = 0x02;
+    static const byte version = 0x03;
 
    public:
-    enum class Mode : uint8_t {
-        ALBUM = 2,
-        PARTY = 3,
-        ONE = 4,
-        AUDIOBOOK = 5,
+    enum class Type : uint8_t {
+        NONE = 0,
+        FOLDER = 1,
+        SPECIAL = 2,
     };
 
-    uint8_t folder;
-    Mode mode;
-    uint8_t special;
-    uint8_t special2;
+    struct Folder {
+        uint8_t folder;
+        FolderModes mode;
+        uint8_t special;
+        uint8_t special2;
+    };
+
+    struct Special {
+        SpecialModes mode;
+    };
+
+    Type type;
+
+   private:
+    union {
+        Folder f;
+        Special s;
+    } content;
+
+   public:
+    RFIDCard(Type t = Type::NONE) : type{t}
+    {}
+
+    Folder* folder()
+    {
+        if (type != Type::FOLDER)
+            return nullptr;
+
+        return &(content.f);
+    }
+
+    Special* special()
+    {
+        if (type != Type::SPECIAL)
+            return nullptr;
+
+        return &(content.s);
+    }
 
     bool deserialize(byte b[18])
     {
@@ -599,20 +643,42 @@ class RFIDCard
                      (static_cast<uint32_t>(b[2]) << 8)  |
                      static_cast<uint32_t>(b[3]);
 
+        uint8_t v = b[4];
+
         if (c != cookie)
             return false;
-        if (b[4] != version)
-            return false;
 
-        folder = b[5];
-        mode = static_cast<Mode>(b[6]);
-        special = b[7];
-        special2 = b[8];
+        if (v == version) {
+            type = static_cast<Type>(b[5]);
+            switch (type) {
+                case Type::FOLDER:
+                    content.f.folder = b[6];
+                    content.f.mode = static_cast<FolderModes>(b[7]);
+                    content.f.special = b[8];
+                    content.f.special2 = b[9];
+                    break;
+                case Type::SPECIAL:
+                    content.s.mode = static_cast<SpecialModes>(b[6]);
+                    break;
+                case Type::NONE:
+                    /* This should never happen */
+                    return false;
+            }
+        } else if (v == 0x2) {
+            /* We can still understand the old format. For now, keep it in */
+            type = Type::FOLDER;
+            content.f.folder = b[5];
+            content.f.mode = static_cast<FolderModes>(b[6]);
+            content.f.special = b[7];
+            content.f.special2 = b[8];
+        } else {
+            return false;
+        }
 
         return true;
     }
 
-    void serialize(byte b[16]) const
+    bool serialize(byte b[16]) const
     {
         /* Zero the buffer out first */
         memset(b, 0, 16*sizeof(byte));
@@ -627,10 +693,23 @@ class RFIDCard
         b[4] = version;
 
         /* Next is all the real data */
-        b[5] = folder;
-        b[6] = static_cast<byte>(mode);
-        b[7] = special;
-        b[8] = special2;
+        b[5] = static_cast<byte>(type);
+        switch (type) {
+            case Type::FOLDER:
+                b[6] = content.f.folder;
+                b[7] = static_cast<byte>(content.f.mode);
+                b[8] = content.f.special;
+                b[9] = content.f.special2;
+                break;
+            case Type::SPECIAL:
+                b[6] = static_cast<byte>(content.s.mode);
+                break;
+            case Type::NONE:
+                /* This should never happen */
+                return false;
+        }
+
+        return true;
     }
 };
 
@@ -712,7 +791,8 @@ class RFIDReader
         MFRC522::StatusCode status = MFRC522::STATUS_ERROR;
 
         /* Serialize the content of the card. */
-        card.serialize(buffer);
+        if (!card.serialize(buffer))
+            return false;
 
         MFRC522::PICC_Type mifare_type = mfrc522.PICC_GetType(mfrc522.uid.sak);
 
@@ -863,7 +943,7 @@ class Settings
         max_volume = 25;
         last_folder_valid = true;
         last_folder = 1;
-        last_mode = static_cast<uint8_t>(RFIDCard::Mode::ALBUM);
+        last_mode = static_cast<uint8_t>(FolderModes::ALBUM);
     }
 
    public:
@@ -917,25 +997,26 @@ class Settings
         EEPROM.update(13, i);
     }
 
-    bool last_card(RFIDCard &card)
+    bool last_card(RFIDCard::Folder *folder)
     {
         if (!last_folder_valid)
             return false;
 
-        card.folder = last_folder;
-        card.mode = static_cast<RFIDCard::Mode>(last_mode);
-        card.special = last_special;
-        card.special2 = last_special2;
+        folder->folder = last_folder;
+        folder->mode = static_cast<FolderModes>(last_mode);
+        folder->special = last_special;
+        folder->special2 = last_special2;
 
         return true;
     }
 
-    void save_last_card(const RFIDCard &card)
+    void save_last_card(const RFIDCard::Folder *folder)
     {
-        last_folder = card.folder;
-        last_mode = static_cast<uint8_t>(card.mode);
-        last_special = card.special;
-        last_special2 = card.special2;
+        last_folder = folder->folder;
+        last_mode = static_cast<uint8_t>(folder->mode);
+        last_special = folder->special;
+        last_special2 = folder->special2;
+
         last_folder_valid = true;
     }
 
@@ -1471,14 +1552,14 @@ class StandbyMode : public DefaultMode
 
     bool play()
     {
-        RFIDCard card;
+        RFIDCard card(RFIDCard::Type::FOLDER);
 
-        if (!settings->last_card(card)) {
+        if (!settings->last_card(card.folder())) {
             standby_timer.reset();
             return false;
         }
 
-        mode = switch_to<PlaybackMode>(card);
+        mode = switch_to<PlaybackMode>(card.folder());
         return true;
     }
 
@@ -1491,14 +1572,25 @@ class StandbyMode : public DefaultMode
 
     bool new_card()
     {
-        RFIDCard card;
+        standby_timer.reset();
 
+        RFIDCard card;
         if (!rfid_reader->read_card(card)) {
-            standby_timer.reset();
+            Serial.println(F("Failed to read card."));
             return false;
         }
 
-        mode = switch_to<PlaybackMode>(card);
+        if (card.type == RFIDCard::Type::FOLDER) {
+            mode = switch_to<PlaybackMode>(card.folder());
+        } else if (card.type == RFIDCard::Type::SPECIAL) {
+            RFIDCard::Special *s = card.special();
+
+            switch (s->mode) {
+                case SpecialModes::ADMIN:
+                    return admin_mode();
+            }
+        }
+
         return true;
     }
 
@@ -1517,23 +1609,23 @@ class PlaybackMode : public DefaultMode
     bool timer_active;
     TimerEvent abort_timer;
 
-    void set_play_mode(const RFIDCard &card)
+    void set_play_mode(const RFIDCard::Folder *folder)
     {
         if (pmode)
             delete pmode;
 
-        switch(card.mode) {
-            case RFIDCard::Mode::ALBUM:
-                pmode = new AlbumPlayerMode(card.folder);
+        switch(folder->mode) {
+            case FolderModes::ALBUM:
+                pmode = new AlbumPlayerMode(folder->folder);
                 break;
-            case RFIDCard::Mode::PARTY:
-                pmode = new PartyPlayerMode(card.folder);
+            case FolderModes::PARTY:
+                pmode = new PartyPlayerMode(folder->folder);
                 break;
-            case RFIDCard::Mode::ONE:
-                pmode = new RepeatOnePlayerMode(card.folder, card.special);
+            case FolderModes::ONE:
+                pmode = new RepeatOnePlayerMode(folder->folder, folder->special);
                 break;
-            case RFIDCard::Mode::AUDIOBOOK:
-                pmode = new AudioBookPlayerMode(card.folder);
+            case FolderModes::AUDIOBOOK:
+                pmode = new AudioBookPlayerMode(folder->folder);
                 break;
         }
     }
@@ -1558,13 +1650,13 @@ class PlaybackMode : public DefaultMode
     }
 
    public:
-    PlaybackMode(DefaultMode *current, const RFIDCard &card) : DefaultMode{current}, pmode{nullptr},
+    PlaybackMode(DefaultMode *current, const RFIDCard::Folder *folder) : DefaultMode{current}, pmode{nullptr},
         timer_active{false}, abort_timer{STOP_PLAYBACK_MS, []() -> bool { return mode->timer(); }}
     {
         Serial.println(F("Started Playback mode"));
 
         /* Remember that we are currently playing this card in the EEPROM */
-        settings->save_last_card(card);
+        settings->save_last_card(folder);
 
         set_play_mode(card);
         pmode->play();
@@ -1661,26 +1753,24 @@ class PlaybackMode : public DefaultMode
 
     bool new_card()
     {
-        /* Read in the current card */
         RFIDCard card;
-
         if (!rfid_reader->read_card(card)) {
-            Serial.println(F("Failed to read card"));
+            Serial.println(F("Failed to read card."));
             return false;
         }
 
-        Serial.println(F("Switch playback according to card settings"));
+        if (card.type == RFIDCard::Type::FOLDER) {
+            mode = switch_to<PlaybackMode>(card.folder());
+        } else if (card.type == RFIDCard::Type::SPECIAL) {
+            RFIDCard::Special *s = card.special();
 
-        /* Stop the old playback */
-        pmode->pause();
+            switch (s->mode) {
+                case SpecialModes::ADMIN:
+                    return admin_mode();
+            }
+        }
 
-        deactivate_timer();
-
-        /* Remember that we are currently playing this card in the EEPROM */
-        settings->save_last_card(card);
-
-        set_play_mode(card);
-        return pmode->play();
+        return true;
     }
 
     bool timer()
@@ -1868,7 +1958,7 @@ class AdminMode : public DefaultMode
         uint8_t value;
 
         uint8_t folder;
-        RFIDCard::Mode mode;
+        FolderModes mode;
         uint8_t special;
         uint8_t special2;
 
@@ -1878,9 +1968,9 @@ class AdminMode : public DefaultMode
 
             folder = value;
 
-            reset(static_cast<uint8_t>(RFIDCard::Mode::ALBUM),
-                  static_cast<uint8_t>(RFIDCard::Mode::ALBUM),
-                  static_cast<uint8_t>(RFIDCard::Mode::AUDIOBOOK));
+            reset(static_cast<uint8_t>(FolderModes::ALBUM),
+                  static_cast<uint8_t>(FolderModes::ALBUM),
+                  static_cast<uint8_t>(FolderModes::AUDIOBOOK));
             step = ChooseMode;
         }
 
@@ -1888,14 +1978,14 @@ class AdminMode : public DefaultMode
         {
             SelectMenu::_done();
 
-            mode = static_cast<RFIDCard::Mode>(value);
+            mode = static_cast<FolderModes>(value);
             switch (mode) {
-                case RFIDCard::Mode::ALBUM:
-                case RFIDCard::Mode::PARTY:
-                case RFIDCard::Mode::AUDIOBOOK:
+                case FolderModes::ALBUM:
+                case FolderModes::PARTY:
+                case FolderModes::AUDIOBOOK:
                     step = WaitForCard;
                     break;
-                case RFIDCard::Mode::ONE:
+                case FolderModes::ONE:
                     reset(1,1,mp3_player->getFolderTrackCount(folder));
                     step = ChooseSpecial;
                     break;
@@ -1924,11 +2014,12 @@ class AdminMode : public DefaultMode
 
         void program_card()
         {
-            RFIDCard card;
-            card.folder = folder;
-            card.mode = mode;
-            card.special = special;
-            card.special2 = special2;
+            RFIDCard card(RFIDCard::Type::FOLDER);
+            RFIDCard::Folder *f = card.folder();
+            f->folder = folder;
+            f->mode = mode;
+            f->special = special;
+            f->special2 = special2;
 
             if (!rfid_reader->write_card(card))
                 Serial.println(F("Failed to program card"));
@@ -1964,7 +2055,7 @@ class AdminMode : public DefaultMode
 
        public:
         ProgramCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 100, &value), step{Steps::ChooseFolder},
-            value{0}, folder{0}, mode{RFIDCard::Mode::ALBUM}, special{0}, special2{0}
+            value{0}, folder{0}, mode{FolderModes::ALBUM}, special{0}, special2{0}
         {}
 
         void activate()
@@ -1985,9 +2076,65 @@ class AdminMode : public DefaultMode
                 case WaitForCard:
                     Serial.println(F("Waiting for RFID card"));
                     break;
+                case ProgramCard:
+                    break;
             }
 
             SelectMenu::activate();
+        }
+
+        void new_card()
+        {
+            if (step == WaitForCard) {
+                Serial.println(F("Now press enter to program this card."));
+                step = ProgramCard;
+            }
+        }
+    };
+
+    class AdminCardMenu : public Menu
+    {
+       private:
+        enum Steps : int {
+            WaitForCard,
+            ProgramCard,
+        };
+
+        Steps step;
+
+       private:
+        void program_card()
+        {
+            RFIDCard card(RFIDCard::Type::SPECIAL);
+            card.special()->mode = SpecialModes::ADMIN;
+
+            if (!rfid_reader->write_card(card))
+                Serial.println(F("Failed to program card"));
+            else
+                Serial.println(F("Card programmed successfully"));
+        }
+
+        Menu* _done()
+        {
+            switch(step) {
+                case WaitForCard:
+                    Serial.println(F("Still waiting for the RFID card"));
+                    return this;
+                case ProgramCard:
+                    program_card();
+                    return nullptr;
+            }
+
+            return nullptr;
+        }
+
+       public:
+        AdminCardMenu(Menu *parent) : Menu{parent}, step{Steps::WaitForCard}
+        {}
+
+        void activate()
+        {
+            Serial.println(F("Waiting for RFID card"));
         }
 
         void new_card()
@@ -2007,6 +2154,7 @@ class AdminMode : public DefaultMode
             MinVolume = 1,
             MaxVolume = 2,
             ProgramCard = 3,
+            AdminCard = 4,
         };
 
         int submenu;
@@ -2027,6 +2175,9 @@ class AdminMode : public DefaultMode
                 case ProgramCard:
                     next = new ProgramCardMenu(this);
                     break;
+                case AdminCard:
+                    next = new AdminCardMenu(this);
+                    break;
             }
 
             return next;
@@ -2034,7 +2185,7 @@ class AdminMode : public DefaultMode
 
         void activate()
         {
-            reset(0, 0, 3);
+            reset(0, 0, 4);
             SelectMenu::activate();
         }
 
