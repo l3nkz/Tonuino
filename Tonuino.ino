@@ -1502,6 +1502,24 @@ bool handle_serial_event()
 
             /* Shutting down the system */
             case 's': shutdown(); break;
+
+            /* Print help message */
+            case 'h':
+                Serial.println(F("The following commands are available:"));
+                Serial.println(F("P - Stop"));
+                Serial.println(F("p - Play/Pause"));
+                Serial.println(F("r - Previous"));
+                Serial.println(F("n - Next"));
+                Serial.println(F("u - Volume Up"));
+                Serial.println(F("d - Volume Down"));
+#ifndef FIVEBUTTONS
+                Serial.println(F("R - Volume Down"));
+                Serial.println(F("N - Volume Up"));
+#endif
+                Serial.println(F("a - Admin Mode"));
+                Serial.println(F("s - Shutdown"));
+                Serial.println(F("h - Help"));
+                break;
         }
     }
 
