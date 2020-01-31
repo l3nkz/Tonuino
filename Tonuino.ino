@@ -2393,13 +2393,6 @@ void setup()
     /* Startup our serial */
     Serial.begin(115200);
 
-    // Lets get started :)
-    Serial.println(F("\n _____         _____ _____ _____ _____"));
-    Serial.println(F("|_   _|___ ___|  |  |     |   | |     |"));
-    Serial.println(F("  | | | . |   |  |  |-   -| | | |  |  |"));
-    Serial.println(F("  |_| |___|_|_|_____|_____|_|___|_____|\n"));
-    Serial.println(F("Licensed under GNU/GPL"));
-
     /* Load our previous settings */
     settings = new Settings();
 
@@ -2436,6 +2429,13 @@ void setup()
     pinMode(VOLDOWN_BUTTON_PIN, INPUT_PULLUP);
 #endif
 
+    // Lets get started :)
+    Serial.println(F("\n _____         _____ _____ _____ _____"));
+    Serial.println(F("|_   _|___ ___|  |  |     |   | |     |"));
+    Serial.println(F("  | | | . |   |  |  |-   -| | | |  |  |"));
+    Serial.println(F("  |_| |___|_|_|_____|_____|_|___|_____|\n"));
+    Serial.println(F("Licensed under GNU/GPL"));
+
     /* Register event handlers and insert the events to the event manager */
     mgr.add(&play_pause_event);
     mgr.add(&stop_event);
@@ -2462,11 +2462,7 @@ void setup()
 
     mgr.add(&serial_event);
 
-    RFIDCard last_card;
-    if (settings->last_card(last_card))
-        mode = mode->switch_to<PlaybackMode>(last_card);
-    else
-        mode = mode->switch_to<StandbyMode>();
+    mode = mode->switch_to<StandbyMode>();
 }
 
 void loop()
