@@ -93,7 +93,7 @@ static const uint32_t STANDBY_SHUTDOWN_MS = 600000;     // == 10 minutes
 
 /* The duration the system should wait before shutting down when
    in locked mode. */
-static const uint32_t LOCKED_SHUTDOWN_MS = 15000;   // == 15 seconds
+static const uint32_t LOCKED_SHUTDOWN_MS = 5000;   // == 5 seconds
 
 /* The duration the system waits before stopping a paused playback */
 static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
