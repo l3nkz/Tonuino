@@ -1698,6 +1698,7 @@ class StandbyMode : public DefaultMode
         RFIDCard card;
         if (!rfid_reader->read_card(card)) {
             Serial.println(F("Failed to read card."));
+            mp3_player->playMp3FolderTrack(404);
             return false;
         }
 
@@ -1985,7 +1986,26 @@ class AdminMode : public DefaultMode
         T maximum;
 
         T *dest;
-        bool play;
+
+        uint16_t intro;
+        uint16_t selections;
+
+       private:
+        void inline _next()
+        {
+            if (cur == maximum)
+                cur = minimum;
+            else
+                cur++;
+        }
+
+        void inline _prev()
+        {
+            if (cur == minimum)
+                cur = maximum;
+            else
+                cur--;
+        }
 
        protected:
         Menu* _done()
@@ -1994,16 +2014,19 @@ class AdminMode : public DefaultMode
             return nullptr;
         }
 
-        void reset(T start, T minimum, T maximum)
+        void reset(T start, T minimum, T maximum, uint16_t intro=0, uint16_t selections=0)
         {
             cur = start;
             this->minimum = minimum;
             this->maximum = maximum;
+
+            this->intro = intro;
+            this->selections = selections;
         }
 
        public:
-        SelectMenu(Menu *parent, T start, T minimum, T maximum, T* dest, bool play=true) : Menu{parent},
-            cur{start}, minimum{minimum}, maximum{maximum}, dest{dest}, play{play}
+        SelectMenu(Menu *parent, T start, T minimum, T maximum, T* dest, uint16_t intro=0, uint16_t selections=0) : Menu{parent},
+            cur{start}, minimum{minimum}, maximum{maximum}, dest{dest}, intro{intro}, selections{selections}
         {}
 
         void activate()
@@ -2015,62 +2038,53 @@ class AdminMode : public DefaultMode
             Serial.print(F(" (current: "));
             Serial.print(cur);
             Serial.println(F(")"));
+
+            if(intro != 0)
+                mp3_player->playMp3FolderTrack(intro);
         }
 
         void next()
         {
-            if (cur == maximum)
-                cur = minimum;
-            else
-                cur++;
+            _next();
+            Serial.print(F("current: "));
+            Serial.println(cur);
 
-            if (play) {
-                Serial.print(F("current: "));
-                Serial.println(cur);
-            }
+            if (selections != 0)
+                mp3_player->playMp3FolderTrack(selections+(cur-minimum));
         }
 
         void volume_up()
         {
-            bool p = play;
-            play = false;
-
             for (int i = 0; i < 10; ++i)
-                next();
+                _next();
 
-            play = p;
-            if (play) {
-                Serial.print(F("current: "));
-                Serial.println(cur);
-            }
+            Serial.print(F("current: "));
+            Serial.println(cur);
+
+            if (selections != 0)
+                mp3_player->playMp3FolderTrack(selections+(cur-minimum));
         }
 
         void prev()
         {
-            if (cur == minimum)
-                cur = maximum;
-            else
-                cur--;
+            _prev();
+            Serial.print(F("current: "));
+            Serial.println(cur);
 
-            if (play) {
-                Serial.print(F("current: "));
-                Serial.println(cur);
-            }
+            if (selections != 0)
+                mp3_player->playMp3FolderTrack(selections+(cur-minimum));
         }
 
         void volume_down()
         {
-            bool p = play;
-            play = false;
-
             for (int i = 0; i < 10; ++i)
-                prev();
+                _prev();
 
-            play = p;
-            if (play) {
-                Serial.print(F("current: "));
-                Serial.println(cur);
-            }
+            Serial.print(F("current: "));
+            Serial.println(cur);
+
+            if (selections != 0)
+                mp3_player->playMp3FolderTrack(selections+(cur-minimum));
         }
     };
 
@@ -2102,7 +2116,8 @@ class AdminMode : public DefaultMode
 
             reset(static_cast<uint8_t>(FolderModes::ALBUM),
                   static_cast<uint8_t>(FolderModes::ALBUM),
-                  static_cast<uint8_t>(FolderModes::AUDIOBOOK));
+                  static_cast<uint8_t>(FolderModes::AUDIOBOOK),
+                  360, 361);
             step = ChooseMode;
         }
 
@@ -2118,7 +2133,7 @@ class AdminMode : public DefaultMode
                     step = WaitForCard;
                     break;
                 case FolderModes::ONE:
-                    reset(1,1,mp3_player->getFolderTrackCount(folder));
+                    reset(1, 1, mp3_player->getFolderTrackCount(folder), 370, 1);
                     step = ChooseSpecial;
                     break;
             }
@@ -2131,6 +2146,7 @@ class AdminMode : public DefaultMode
             special = value;
             switch (mode) {
                 default:
+                    reset(0, 0, 0, 400, 0);
                     step = WaitForCard;
                     break;
             }
@@ -2140,7 +2156,8 @@ class AdminMode : public DefaultMode
         {
             SelectMenu::_done();
 
-            special = value;
+            special2 = value;
+            reset(0, 0, 0, 400, 0);
             step = WaitForCard;
         }
 
@@ -2153,10 +2170,13 @@ class AdminMode : public DefaultMode
             f->special = special;
             f->special2 = special2;
 
-            if (!rfid_reader->write_card(card))
+            if (!rfid_reader->write_card(card)) {
                 Serial.println(F("Failed to program card"));
-            else
+                mp3_player->playMp3FolderTrack(403);
+            } else {
                 Serial.println(F("Card programmed successfully"));
+                mp3_player->playMp3FolderTrack(402);
+            }
         }
 
         Menu* _done()
@@ -2186,8 +2206,9 @@ class AdminMode : public DefaultMode
         }
 
        public:
-        FolderCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 100, &value), step{Steps::ChooseFolder},
-            value{0}, folder{0}, mode{FolderModes::ALBUM}, special{0}, special2{0}
+        FolderCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 100, &value, 350, 1),
+            step{Steps::ChooseFolder}, value{0}, folder{0}, mode{FolderModes::ALBUM},
+            special{0}, special2{0}
         {}
 
         void activate()
@@ -2219,6 +2240,7 @@ class AdminMode : public DefaultMode
         {
             if (step == WaitForCard) {
                 Serial.println(F("Now press enter to program this card."));
+                mp3_player->playMp3FolderTrack(401);
                 step = ProgramCard;
             }
         }
@@ -2244,6 +2266,8 @@ class AdminMode : public DefaultMode
             SelectMenu::_done();
 
             mode = static_cast<SpecialModes>(value);
+
+            reset(0, 0, 0, 400, 0);
             step = WaitForCard;
         }
 
@@ -2252,10 +2276,13 @@ class AdminMode : public DefaultMode
             RFIDCard card(RFIDCard::Type::SPECIAL);
             card.special()->mode = mode;
 
-            if (!rfid_reader->write_card(card))
+            if (!rfid_reader->write_card(card)) {
                 Serial.println(F("Failed to program card"));
-            else
+                mp3_player->playMp3FolderTrack(403);
+            } else {
                 Serial.println(F("Card programmed successfully"));
+                mp3_player->playMp3FolderTrack(402);
+            }
         }
 
         Menu* _done()
@@ -2276,7 +2303,7 @@ class AdminMode : public DefaultMode
         }
 
        public:
-        SpecialCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 3, &value), step{Steps::ChooseMode}
+        SpecialCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 3, &value, 380, 381), step{Steps::ChooseMode}
         {}
 
         void activate()
@@ -2291,6 +2318,8 @@ class AdminMode : public DefaultMode
                 case ProgramCard:
                     break;
             }
+
+            SelectMenu::activate();
         }
 
         void new_card()
@@ -2298,6 +2327,7 @@ class AdminMode : public DefaultMode
             if (step == WaitForCard) {
                 Serial.println(F("Now press enter to program this card."));
                 step = ProgramCard;
+                mp3_player->playMp3FolderTrack(401);
             }
         }
     };
@@ -2334,13 +2364,13 @@ class AdminMode : public DefaultMode
                 case Exit:
                     break;
                 case MinVolume:
-                    next = new SelectMenu<uint8_t>(this, settings->min_volume, 0, settings->max_volume, &settings->min_volume);
+                    next = new SelectMenu<uint8_t>(this, settings->min_volume, 0, settings->max_volume, &settings->min_volume, 320, 1);
                     break;
                 case MaxVolume:
-                    next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume);
+                    next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume, 330, 1);
                     break;
                 case Equalizer:
-                    next = new SelectMenu<uint8_t>(this, settings->equalizer, 0, 5, &settings->equalizer);
+                    next = new SelectMenu<uint8_t>(this, settings->equalizer, 0, 5, &settings->equalizer, 340, 341);
                     break;
                 case FolderCard:
                     next = new FolderCardMenu(this);
@@ -2373,12 +2403,12 @@ class AdminMode : public DefaultMode
                     break;
             }
 
-            reset(0, 0, nr_submenus);
+            reset(0, 0, nr_submenus, 310, 311);
             SelectMenu::activate();
         }
 
        public:
-        MainMenu() : SelectMenu(nullptr, 0, 0, nr_submenus, &submenu)
+        MainMenu() : SelectMenu(nullptr, 0, 0, nr_submenus, &submenu, 310, 311)
         {}
     };
 
