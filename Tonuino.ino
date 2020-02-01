@@ -138,6 +138,7 @@ class Event
    public:
     virtual void check_and_handle(uint32_t ts) = 0;
     virtual void clear() {}
+    virtual void reset() {}
 };
 
 class EventManager
@@ -173,6 +174,12 @@ class EventManager
         Serial.println(reinterpret_cast<uint16_t>(e), HEX);
 
         return *this;
+    }
+
+    void reset()
+    {
+        for (Event *e = events; e; e = e->next)
+            e->reset();
     }
 
     void loop()
@@ -325,6 +332,8 @@ class ValueTrigger
     ValueTrigger(int ref) : reference{ref}
     {}
 
+    void reset() {}
+
     bool triggered(int val)
     {
         return Comp::compare(val, reference);
@@ -341,6 +350,8 @@ class EdgeTrigger
    public:
     EdgeTrigger(int ref) : reference{ref}, last_true{false}
     {}
+
+    void reset() { last_true = false; }
 
     bool triggered(int val)
     {
@@ -411,6 +422,8 @@ class AnalogEvent : public Event
         if (trigger.triggered(val))
             this->handle();
     }
+
+    void reset() { trigger.reset(); }
 };
 
 class TimerEvent : public Event
@@ -1133,7 +1146,6 @@ class LEDMode : public Mode
 
     bool battery_high()
     {
-        Serial.println(F("Battery level is high."));
         *battery_led = CRGB::Green;
         FastLED.show();
 
@@ -1142,7 +1154,6 @@ class LEDMode : public Mode
 
     bool battery_low()
     {
-        Serial.println(F("Battery level is low"));
         *battery_led = CRGB::Red;
         FastLED.show();
 
@@ -2444,6 +2455,16 @@ class LockedMode : public DefaultMode
         mgr.add(&blink_timer);
     }
 #endif
+
+    ~LockedMode()
+    {
+        mgr.remove(&shutdown_timer);
+#ifdef STATUS_LED
+        mgr.remove(&blink_timer);
+#endif
+
+        mgr.reset();
+    }
 
 #ifdef STATUS_LED
     bool timer()
