@@ -91,6 +91,10 @@
 /* The duration the system should wait before shutting down */
 static const uint32_t STANDBY_TIME_MS = 600000;     // == 10 minutes
 
+/* The duration the system should wait before shutting down when
+   in locked mode. */
+static const uint32_t LOCKED_SHUTDOWN_MS = 15000;   // == 15 seconds
+
 /* The duration the system waits before stopping a paused playback */
 static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
 
@@ -552,6 +556,8 @@ enum class FolderModes : uint8_t {
 
 enum class SpecialModes : uint8_t {
     ADMIN = 1,
+    LOCKED = 2,
+    UNLOCKED = 3,
 };
 
 class RFIDCard
@@ -825,19 +831,34 @@ class Settings
      * address  content
      * ----------------
      * 0-3      cookie
-     * 4        version (currently 1)
+     * 4        version (currently 2)
      * 5        volume
      * 6        minimum volume
      * 7        maximum volume
      * 8        last folder valid (0 == no, 1 == yes)
      * 9-12     last folder
-     * 13       number of folder progresses
-     * 14-...   progress audio book folders
+     * 13       equalizer
+     * 14-18    FREE
+     * 19       status bits (see status enum)
+     * 20       number of folder progresses
+     * 21-...   progress of audio book folders
      **/
 
    private:
+    /**
+     * Status bits in the EEPROM:
+     * bit      meaning
+     * ----------------
+     * 0        locked
+     * 1-7      FREE
+     **/
+    enum class Status : byte {
+        LOCKED = 0x1,
+    };
+
+   private:
     static const uint32_t cookie = 0xdeadbeef;
-    static const byte version = 0x01;
+    static const byte version = 0x02;
 
    private:
     bool last_folder_valid;
@@ -859,6 +880,10 @@ class Settings
     uint8_t volume;
     uint8_t min_volume;
     uint8_t max_volume;
+
+    uint8_t equalizer;
+
+    bool locked;
 
    private:
     bool from_eeprom()
@@ -890,14 +915,19 @@ class Settings
             last_special2 = EEPROM.read(12);
         }
 
+        equalizer = EEPROM.read(13);
+
+        byte status = EEPROM.read(19);
+        locked = (status & static_cast<byte>(Status::LOCKED)) != 0;
+
         /* Read the saved audio book progresses */
-        byte nr_pogresses = EEPROM.read(13);
+        byte nr_pogresses = EEPROM.read(20);
         Progress **n = &progresses;
         for (byte i = 0; i < nr_pogresses; ++i) {
             Progress *p = new Progress;
 
-            p->folder = EEPROM.read(14+i*2);
-            p->track = EEPROM.read(15+i*2);
+            p->folder = EEPROM.read(21+i*2);
+            p->track = EEPROM.read(22+i*2);
             p->next = nullptr;
 
             *n = p;
@@ -912,9 +942,9 @@ class Settings
         volume = 12;
         min_volume = 5;
         max_volume = 25;
-        last_folder_valid = true;
-        last_folder = 1;
-        last_mode = static_cast<uint8_t>(FolderModes::ALBUM);
+        last_folder_valid = false;
+        equalizer = static_cast<uint8_t>(DfMp3_Eq_Normal);
+        locked = false;
     }
 
    public:
@@ -958,14 +988,21 @@ class Settings
             EEPROM.update(12, last_special2);
         }
 
+        EEPROM.update(13, equalizer);
+
+        byte status = 0;
+        if (locked) status |= static_cast<byte>(Status::LOCKED);
+
+        EEPROM.update(19, status);
+
         /* Write the saved audio book progresses */
         byte i = 0;
         for (Progress *n = progresses; n; n = n->next) {
-            EEPROM.update(14+i*2, n->folder);
-            EEPROM.update(15+i*2, n->track);
+            EEPROM.update(21+i*2, n->folder);
+            EEPROM.update(22+i*2, n->track);
             i++;
         }
-        EEPROM.update(13, i);
+        EEPROM.update(20, i);
     }
 
     bool last_card(RFIDCard::Folder *folder)
@@ -1081,7 +1118,7 @@ class Mode
 #ifdef STATUS_LED
 class LEDMode : public Mode
 {
-   private:
+   protected:
     CRGB *battery_led;
 
    protected:
@@ -1466,6 +1503,7 @@ static DefaultMode *mode;
 class StandbyMode;
 class PlaybackMode;
 class AdminMode;
+class LockedMode;
 
 
 /* Free standing functions required for system management */
@@ -1613,6 +1651,12 @@ class StandbyMode : public DefaultMode
             switch (s->mode) {
                 case SpecialModes::ADMIN:
                     mode = switch_to<AdminMode>();
+                    break;
+                case SpecialModes::LOCKED:
+                    settings->locked = true;
+                    mode = switch_to<LockedMode>();
+                    break;
+                case SpecialModes::UNLOCKED:
                     break;
             }
         }
@@ -1797,6 +1841,12 @@ class PlaybackMode : public DefaultMode
                 case SpecialModes::ADMIN:
                     mode = switch_to<AdminMode>();
                     break;
+                case SpecialModes::LOCKED:
+                    settings->locked = true;
+                    mode = switch_to<LockedMode>();
+                    break;
+                case SpecialModes::UNLOCKED:
+                    break;
             }
         }
 
@@ -1966,7 +2016,7 @@ class AdminMode : public DefaultMode
         }
     };
 
-    class ProgramCardMenu : public SelectMenu<uint8_t>
+    class FolderCardMenu : public SelectMenu<uint8_t>
     {
        private:
         enum Steps : int {
@@ -2078,7 +2128,7 @@ class AdminMode : public DefaultMode
         }
 
        public:
-        ProgramCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 100, &value), step{Steps::ChooseFolder},
+        FolderCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 100, &value), step{Steps::ChooseFolder},
             value{0}, folder{0}, mode{FolderModes::ALBUM}, special{0}, special2{0}
         {}
 
@@ -2116,21 +2166,33 @@ class AdminMode : public DefaultMode
         }
     };
 
-    class AdminCardMenu : public Menu
+    class SpecialCardMenu : public SelectMenu<uint8_t>
     {
        private:
         enum Steps : int {
+            ChooseMode,
             WaitForCard,
             ProgramCard,
         };
 
         Steps step;
+        uint8_t value;
+
+        SpecialModes mode;
 
        private:
+        void done_choose_mode()
+        {
+            SelectMenu::_done();
+
+            mode = static_cast<SpecialModes>(value);
+            step = WaitForCard;
+        }
+
         void program_card()
         {
             RFIDCard card(RFIDCard::Type::SPECIAL);
-            card.special()->mode = SpecialModes::ADMIN;
+            card.special()->mode = mode;
 
             if (!rfid_reader->write_card(card))
                 Serial.println(F("Failed to program card"));
@@ -2141,6 +2203,9 @@ class AdminMode : public DefaultMode
         Menu* _done()
         {
             switch(step) {
+                case ChooseMode:
+                    done_choose_mode();
+                    return this;
                 case WaitForCard:
                     Serial.println(F("Still waiting for the RFID card"));
                     return this;
@@ -2153,12 +2218,21 @@ class AdminMode : public DefaultMode
         }
 
        public:
-        AdminCardMenu(Menu *parent) : Menu{parent}, step{Steps::WaitForCard}
+        SpecialCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 3, &value), step{Steps::ChooseMode}
         {}
 
         void activate()
         {
-            Serial.println(F("Waiting for RFID card"));
+            switch(step) {
+                case ChooseMode:
+                    Serial.println(F("Choose the card mode"));
+                    break;
+                case WaitForCard:
+                    Serial.println(F("Waiting for RFID card"));
+                    break;
+                case ProgramCard:
+                    break;
+            }
         }
 
         void new_card()
@@ -2177,8 +2251,8 @@ class AdminMode : public DefaultMode
             Exit = 0,
             MinVolume = 1,
             MaxVolume = 2,
-            ProgramCard = 3,
-            AdminCard = 4,
+            FolderCard = 3,
+            SpecialCard = 4,
         };
 
         int submenu;
@@ -2196,11 +2270,11 @@ class AdminMode : public DefaultMode
                 case MaxVolume:
                     next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume);
                     break;
-                case ProgramCard:
-                    next = new ProgramCardMenu(this);
+                case FolderCard:
+                    next = new FolderCardMenu(this);
                     break;
-                case AdminCard:
-                    next = new AdminCardMenu(this);
+                case SpecialCard:
+                    next = new SpecialCardMenu(this);
                     break;
             }
 
@@ -2314,6 +2388,95 @@ class AdminMode : public DefaultMode
         menu = menu->abort();
         if (!menu)
             mode = switch_to<StandbyMode>();
+
+        return true;
+    }
+};
+
+class LockedMode : public DefaultMode
+{
+   private:
+    TimerEvent shutdown_timer;
+
+#ifdef STATUS_LED
+    bool led_on;
+    TimerEvent blink_timer;
+#endif
+
+   private:
+#ifdef STATUS_LED
+    void switch_led_state()
+    {
+        if (led_on) {
+            *(this->battery_led) = CRGB::Black;
+            led_on = false;
+        } else {
+            *(this->battery_led) = CRGB::Red;
+            led_on = true;
+        }
+
+        FastLED.show();
+    }
+#endif
+
+    void activate()
+    {
+        Serial.println(F("The system is locked. Use unlock card to use the system again."));
+#ifdef STATUS_LED
+        switch_led_state();
+#endif
+    }
+
+   public:
+#ifndef STATUS_LED
+    LockedMode(DefaultMode *current) : DefaultMode{current},
+        shutdown_timer(LOCKED_SHUTDOWN_MS, []() -> bool { shutdown(); return true; })
+    {
+        mgr.add(&blink_timer);
+    }
+#else
+    LockedMode(DefaultMode *current) : DefaultMode{current},
+        shutdown_timer(LOCKED_SHUTDOWN_MS, []() -> bool { shutdown(); return true; }),
+        led_on{false},
+        blink_timer(50, []() -> bool { return mode->timer(); })
+    {
+        mgr.add(&shutdown_timer);
+        mgr.add(&blink_timer);
+    }
+#endif
+
+#ifdef STATUS_LED
+    bool timer()
+    {
+        switch_led_state();
+        return true;
+    }
+#endif
+
+    bool new_card()
+    {
+        RFIDCard card;
+        if (!rfid_reader->read_card(card)) {
+            Serial.println(F("Failed to read card."));
+            return false;
+        }
+
+        if (card.type == RFIDCard::Type::FOLDER) {
+            Serial.println(F("The system is locked!"));
+        } else if (card.type == RFIDCard::Type::SPECIAL) {
+            RFIDCard::Special *s = card.special();
+
+            switch (s->mode) {
+                case SpecialModes::UNLOCKED:
+                    Serial.println(F("Unlocking system"));
+                    settings->locked = false;
+                    mode = switch_to<StandbyMode>();
+                    break;
+                default:
+                    Serial.println(F("The system is locked!"));
+                    break;
+            }
+        }
 
         return true;
     }
@@ -2434,7 +2597,7 @@ void setup()
     rfid_reader->print_version();
 
     mp3_player->setVolume(settings->volume);
-    mp3_player->setEq(DfMp3_Eq_Normal);
+    mp3_player->setEq(static_cast<DfMp3_Eq>(settings->equalizer));
     mp3_player->setPlaybackSource(DfMp3_PlaySource_Sd);
 
     /* Start the default mode */
@@ -2488,7 +2651,10 @@ void setup()
 
     mgr.add(&serial_event);
 
-    mode = mode->switch_to<StandbyMode>();
+    if (settings->locked)
+        mode = mode->switch_to<LockedMode>();
+    else
+        mode = mode->switch_to<StandbyMode>();
 }
 
 void loop()
