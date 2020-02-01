@@ -2461,7 +2461,7 @@ class LockedMode : public DefaultMode
     LockedMode(DefaultMode *current) : DefaultMode{current},
         shutdown_timer(LOCKED_SHUTDOWN_MS, []() -> bool { shutdown(); return true; }),
         led_on{false},
-        blink_timer(50, []() -> bool { return mode->timer(); })
+        blink_timer(100, []() -> bool { return mode->timer(); }, true)
     {
         mgr.add(&shutdown_timer);
         mgr.add(&blink_timer);
