@@ -89,7 +89,7 @@
 
 /* Update theses according to your behavioral requirements */
 /* The duration the system should wait before shutting down */
-static const uint32_t STANDBY_TIME_MS = 600000;     // == 10 minutes
+static const uint32_t STANDBY_SHUTDOWN_MS = 600000;     // == 10 minutes
 
 /* The duration the system should wait before shutting down when
    in locked mode. */
@@ -1600,7 +1600,7 @@ class StandbyMode : public DefaultMode
 
    public:
     StandbyMode(DefaultMode *current) : DefaultMode{current},
-        standby_timer{STANDBY_TIME_MS, []() -> bool { return mode->timer(); }}
+        standby_timer{STANDBY_SHUTDOWN_MS, []() -> bool { return mode->timer(); }}
     {
         Serial.println(F("Started Standby mode"));
 
