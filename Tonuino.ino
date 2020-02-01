@@ -998,10 +998,12 @@ class Settings
                 return i->track;
         }
 
-        return 0;
+        /* If we don't know the folder yet, start with the first
+           track in the folder. */
+        return 1;
     }
 
-    void progress(uint8_t folder, uint8_t track)
+    void save_progress(uint8_t folder, uint8_t track)
     {
         for (Progress *i = progresses; i; i = i->next) {
             if (i->folder == folder) {
@@ -1331,12 +1333,33 @@ class AlbumPlayerMode : public PlayerMode
 
 class AudioBookPlayerMode : public PlayerMode
 {
+   private:
+    bool save_progress;
+
+    void _stop()
+    {
+        settings->remove_progress(folder);
+        save_progress = false;
+    }
+
+    bool _next()
+    {
+        if (!PlayerMode::_next()) {
+            settings->remove_progress(folder);
+            save_progress = false;
+
+            return false;
+        }
+
+        return true;
+    }
+
    public:
-    AudioBookPlayerMode(uint8_t folder) : PlayerMode{folder}
+    AudioBookPlayerMode(uint8_t folder) : PlayerMode{folder}, save_progress{true}
     {
         Serial.print(F("Folder: "));
         Serial.print(folder);
-        Serial.println(F(" mode: PLAYBOOK"));
+        Serial.println(F(" mode: AUDIOBOOK"));
 
         /* Get from the EEPROM where we last finished listening */
         this->cur_track = settings->progress(folder);
@@ -1346,8 +1369,9 @@ class AudioBookPlayerMode : public PlayerMode
 
     ~AudioBookPlayerMode()
     {
-        /* Save back to the EEPROM where we stopped listening this time */
-        settings->progress(folder, this->cur_track);
+        if (save_progress)
+            /* Save back to the EEPROM where we stopped listening this time */
+            settings->save_progress(folder, this->cur_track);
     }
 };
 
