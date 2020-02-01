@@ -1,0 +1,53 @@
+# Modes
+0301-standby_mode|Ruhemodus
+0302-playback_mode|Abspielmodus
+0303-admin_mode|Adminmodus
+0304-locked_mode|Gesperrtmodus
+
+# Admin menu - main menu
+0310-main_menu|Adminmenü. Wähle eine Option aus und drücke Play.
+0311-main_menu-exit|Menü verlassen
+0312-main_menu-min_volume|Lautstärkeminimum einstellen
+0313-main_menu-max_volume|Lautstärkemaximum einstellen
+0314-main_menu-equalizer|Equalizer auswählen
+0315-main_menu-folder_card|Ordnerkarte programmieren
+0316-main_menu-special_card|Spezialkarte programmieren
+0317-main_menu-dump_card|Karte auf Konsole ausgeben
+0318-main_menu-dump_settings|Einstellungen auf Konsole ausgeben
+
+# Admin menu - min volume submenu
+0320-min_volume|Wähle das Lautstärkeminimum und drücke Play
+
+# Admin menu - max volume submenu
+0330-max_volume|Wähle das Lautstärkemaximum und drücke Play
+
+# Admin menu - equalizer submenu
+0340-equalizer|Wähle den Equalizer und drücke Play
+0341-equalizer-normal|Normal
+0342-equalizer-pop|Pop
+0342-equalizer-rock|Rock
+0342-equalizer-jazz|Jazz
+0342-equalizer-classic|Klassik
+0342-equalizer-bass|Bass
+
+# Admin menu - folder card submenu
+0350-folder_card|Wähle einen Ordner aus und drücke Play
+0360-folder_card-mode|Wähle den Abspielmodus aus und drücke Play
+0361-folder_card-mode-album|Albummodus
+0362-folder_card-mode-party|Partymodus
+0363-folder_card-mode-one|Einzelmodus
+0364-folder_card-mode-audiobook|Hörspielmodus
+0370-folder_card-one-special|Wähle den Titel aus und drücke Play
+
+# Admin menu - special card submenu
+0380-special_card|Wähle einen Typ aus und drücke Play
+0381-special_card-mode-admin|Adminkarte
+0382-special_card-mode-lock|Sperrkarte
+0383-special_card-mode-unlock|Entsperrkarte
+
+# General success or failure messages
+0400-wait_for_card|Lege jetzt die Karte auf
+0401-program_card|Drücke Play um die Karte zu programmieren
+0402-program_success|Programmieren war erfolgreich
+0403-program_failure|Programmieren schlug fehl
+0404-read_failure|Die Karte konnte nicht gelesen werden
