@@ -2340,7 +2340,7 @@ class AdminMode : public DefaultMode
                     next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume);
                     break;
                 case Equalizer:
-                    next = new SelectMenu<uint8_t>(this, settings->equalizer, 1, 6, &settings->equalizer);
+                    next = new SelectMenu<uint8_t>(this, settings->equalizer, 0, 5, &settings->equalizer);
                     break;
                 case FolderCard:
                     next = new FolderCardMenu(this);
