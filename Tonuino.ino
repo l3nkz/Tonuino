@@ -37,6 +37,9 @@
 /* Uncomment if the system still has an unused input pin */
 #define HAS_UNUSED_INPUT
 
+/* Uncomment this if you want more serial debugging support */
+//#define SERIAL_DEBUG
+
 
 /* Update these according to your hardware setup */
 /* Pins usage for the buttons */
@@ -712,7 +715,14 @@ class RFIDReader
     static const constexpr byte data_block = sector * 4;        // We want to write our data in the first block of a
                                                                 // sector;
 
+#ifdef SERIAL_DEBUG
+   public:
+#else
+   private:
+#endif
     MFRC522 mfrc522;
+
+   private:
     MFRC522::MIFARE_Key key;
 
    public:
@@ -1080,6 +1090,37 @@ class Settings
             }
         }
     }
+
+#ifdef SERIAL_DEBUG
+    void dump()
+    {
+        Serial.println(F("Settings:"));
+        Serial.print(F("V: ")); Serial.print(volume);
+        Serial.print(F(" (")); Serial.print(min_volume);
+        Serial.print(F(" - ")); Serial.print(max_volume); Serial.println(F(")"));
+        if (last_folder_valid) {
+            Serial.print(F("Folder: ")); Serial.print(last_folder);
+            Serial.print(F(" ")); Serial.print(static_cast<uint8_t>(last_mode));
+            switch(static_cast<FolderModes>(last_mode)) {
+                case FolderModes::ALBUM: Serial.println(F(" A")); break;
+                case FolderModes::PARTY: Serial.println(F(" P")); break;
+                case FolderModes::ONE:
+                    Serial.print(F(" O (")); Serial.print(last_special); Serial.println(")");
+                    break;
+                case FolderModes::AUDIOBOOK: Serial.println(F(" B")); break;
+            }
+        }
+        Serial.print(F("EQ: ")); Serial.println(equalizer);
+        Serial.print(F("Locked: ")); Serial.println(locked ? F("yes") : F("no"));
+        if (progresses) {
+            Serial.print(F("Progress: "));
+            for (Progress *n = progresses; n; n = n->next) {
+                Serial.print(n->folder); Serial.print("->"); Serial.print(n->track);
+                Serial.print(F(" "));
+            }
+        }
+    }
+#endif
 };
 
 
@@ -1541,6 +1582,7 @@ void shutdown()
     sd_mode.shutdown();
 }
 
+#ifdef SERIAL_DEBUG
 /* Method to dispatch input from the serial */
 bool handle_serial_event()
 {
@@ -1580,6 +1622,9 @@ bool handle_serial_event()
             /* Shutting down the system */
             case 's': shutdown(); break;
 
+            /* Dump system settings to serial */
+            case 'S': success = true; settings->dump(); break;
+
             /* Print help message */
             case 'h':
                 Serial.println(F("The following commands are available:"));
@@ -1595,6 +1640,7 @@ bool handle_serial_event()
 #endif
                 Serial.println(F("a - Admin Mode"));
                 Serial.println(F("s - Shutdown"));
+                Serial.println(F("S - Dump Settings"));
                 Serial.println(F("h - Help"));
                 break;
         }
@@ -1602,6 +1648,7 @@ bool handle_serial_event()
 
     return success;
 }
+#endif
 
 
 class StandbyMode : public DefaultMode
@@ -2258,6 +2305,12 @@ class AdminMode : public DefaultMode
     class MainMenu : public SelectMenu<int>
     {
        private:
+#ifdef SERIAL_DEBUG
+        static const constexpr int nr_submenus = 7;
+#else
+        static const constexpr int nr_submenus = 5;
+#endif
+
         enum Items : int {
             Exit = 0,
             MinVolume = 1,
@@ -2265,6 +2318,10 @@ class AdminMode : public DefaultMode
             Equalizer = 3,
             FolderCard = 4,
             SpecialCard = 5,
+#ifdef SERIAL_DEBUG
+            DumpCard = 6,
+            DumpSettings = 7
+#endif
         };
 
         int submenu;
@@ -2291,6 +2348,16 @@ class AdminMode : public DefaultMode
                 case SpecialCard:
                     next = new SpecialCardMenu(this);
                     break;
+#ifdef SERIAL_DEBUG
+                case DumpCard:
+                    rfid_reader->mfrc522.PICC_DumpToSerial(&(rfid_reader->mfrc522.uid));
+                    next = this;
+                    break;
+                case DumpSettings:
+                    settings->dump();
+                    next = this;
+                    break;
+#endif
             }
 
             return next;
@@ -2306,12 +2373,12 @@ class AdminMode : public DefaultMode
                     break;
             }
 
-            reset(0, 0, 5);
+            reset(0, 0, nr_submenus);
             SelectMenu::activate();
         }
 
        public:
-        MainMenu() : SelectMenu(nullptr, 0, 0, 5, &submenu)
+        MainMenu() : SelectMenu(nullptr, 0, 0, nr_submenus, &submenu)
         {}
     };
 
@@ -2606,7 +2673,9 @@ bool print_battery_voltage()
 static TimerEvent voltage_print_event(PRINT_VOLTAGE_MS, print_battery_voltage, true);
 #endif
 
+#ifdef SERIAL_DEBUG
 static SerialEvent serial_event(handle_serial_event);
+#endif
 
 
 /* Arduino specific functions */
@@ -2682,7 +2751,9 @@ void setup()
     mgr.add(&voltage_print_event);
 #endif
 
+#ifdef SERIAL_DEBUG
     mgr.add(&serial_event);
+#endif
 
     if (settings->locked)
         mode = mode->switch_to<LockedMode>();
