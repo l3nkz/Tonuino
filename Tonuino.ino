@@ -2262,8 +2262,9 @@ class AdminMode : public DefaultMode
             Exit = 0,
             MinVolume = 1,
             MaxVolume = 2,
-            FolderCard = 3,
-            SpecialCard = 4,
+            Equalizer = 3,
+            FolderCard = 4,
+            SpecialCard = 5,
         };
 
         int submenu;
@@ -2281,6 +2282,9 @@ class AdminMode : public DefaultMode
                 case MaxVolume:
                     next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume);
                     break;
+                case Equalizer:
+                    next = new SelectMenu<uint8_t>(this, settings->equalizer, 1, 6, &settings->equalizer);
+                    break;
                 case FolderCard:
                     next = new FolderCardMenu(this);
                     break;
@@ -2294,12 +2298,20 @@ class AdminMode : public DefaultMode
 
         void activate()
         {
-            reset(0, 0, 4);
+            switch (static_cast<Items>(submenu)) {
+                case Equalizer:
+                    mp3_player->setEq(static_cast<DfMp3_Eq>(settings->equalizer));
+                    break;
+                default:
+                    break;
+            }
+
+            reset(0, 0, 5);
             SelectMenu::activate();
         }
 
        public:
-        MainMenu() : SelectMenu(nullptr, 0, 0, 4, &submenu)
+        MainMenu() : SelectMenu(nullptr, 0, 0, 5, &submenu)
         {}
     };
 
