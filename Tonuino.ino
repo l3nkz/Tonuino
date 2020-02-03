@@ -92,7 +92,7 @@
 
 /* Update theses according to your behavioral requirements */
 /* The duration the system should wait before shutting down */
-static const uint32_t STANDBY_SHUTDOWN_MS = 600000;     // == 10 minutes
+static const uint32_t STANDBY_SHUTDOWN_MS = 120000;     // == 2 minutes
 
 /* The duration the system should wait before shutting down when
    in locked mode. */
