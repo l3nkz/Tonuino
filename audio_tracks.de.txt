@@ -25,10 +25,10 @@
 0340-equalizer|Wähle den Equalizer und drücke Play
 0341-equalizer-normal|Normal
 0342-equalizer-pop|Pop
-0342-equalizer-rock|Rock
-0342-equalizer-jazz|Jazz
-0342-equalizer-classic|Klassik
-0342-equalizer-bass|Bass
+0343-equalizer-rock|Rock
+0344-equalizer-jazz|Jazz
+0345-equalizer-classic|Klassik
+0346-equalizer-bass|Bass
 
 # Admin menu - folder card submenu
 0350-folder_card|Wähle einen Ordner aus und drücke Play
