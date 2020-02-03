@@ -20,13 +20,14 @@ and easier to extend in the future.
 
 While I tried to replicate all the existing features form the original project,
 I am not yet fully done. Some of the latest features (such as toddler mode,
-freeze dance, …) are not supported and also the admin mode is not yet fully
-working. These are things that I will work on in the near future. However, the
-basic features as for example reading the RFID card and playing the
-corresponding files is fully functional. See the below list for a complete
-overview about the finished features.
+freeze dance, …) are not supported. These are things that I will work on in the
+near future. However, the basic features as for example reading the RFID card
+and playing the corresponding files is fully functional. See the below list for
+a complete overview about the finished features. I also added a couple of new
+features or changed how things worked.
 
- * [ ] Button interaction
+## Original features
+ * [x] Button interaction
    * [x] 3 Button setup
    * [x] 5 Button setup
  * [ ] Play folder
@@ -36,17 +37,33 @@ overview about the finished features.
    * [x] Party mode
    * [ ] Album mode (von - bis)
    * [ ] Playbook mode (von - bis)
- * [ ] RFID cards
+ * [x] RFID cards
    * [x] Read RFID cards (same format as original code)
    * [x] Write RFID cards (same format as original code)
- * [ ] Admin mode
+ * [x] Admin mode
    * [x] Program new cards
    * [x] min/max volume
-   * [ ] Pin code
-   * [ ] Admin card
-   * [ ] Math question to unlock
- * [ ] Settings
+   * [ ] ~~Pin code~~
+   * [x] Admin card
+   * [ ] ~~Math question to unlock~~
+   * [ ] ~~Enter with key stroke~~
+   * [x] Say menu options
+ * [x] Settings
    * [x] Min/Max volume
    * [x] Last/initial volume
+   * [x] Equalizer
+   * [x] TonUINO is locked
    * [x] Last active card/folder (this allows resuming the last playback after standby)
-   * [x] Playbook progress
+   * [x] Audiobook progress
+ * [ ] Additional system modes
+   * [ ] Freeze Dance
+   * [ ] Toddler
+   * [ ] Kindergarten
+
+## Additional features
+ * Lock and Unlock cards
+ * Status LED
+ * Battery control and automatic shutdown
+ * Control via serial console (DEBUG_SERIAL)
+ * Dump settings (DEBUG_SERIAL)
+ * Dump RFID card (DEBUG_SERIAL)
