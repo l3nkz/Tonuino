@@ -105,7 +105,7 @@ static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
    when there is no further input */
 static const uint32_t ABORT_MENU_MS = 60000;        // == 1 minute
 
-#ifdef STATUS_LED
+#if defined(STATUS_LED) and defined(SERIAL_DEBUG)
 /* How long the system should wait between consecutive outputs of
    the current battery voltage. */
 static const uint32_t PRINT_VOLTAGE_MS = 120000;     // == 2 minutes
@@ -2727,6 +2727,7 @@ static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, ba
 static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0),
     []() -> bool { return mode->battery_critical(); });
 
+#ifdef SERIAL_DEBUG
 bool print_battery_voltage()
 {
     int val = analogRead(VOLTAGE_PIN);
@@ -2742,6 +2743,7 @@ bool print_battery_voltage()
 
 }
 static TimerEvent voltage_print_event(PRINT_VOLTAGE_MS, print_battery_voltage, true);
+#endif
 #endif
 
 #ifdef SERIAL_DEBUG
@@ -2819,7 +2821,9 @@ void setup()
     mgr.add(&battery_high_event);
     mgr.add(&battery_low_event);
     mgr.add(&battery_critical_event);
+#ifdef SERIAL_DEBUG
     mgr.add(&voltage_print_event);
+#endif
 #endif
 
 #ifdef SERIAL_DEBUG
