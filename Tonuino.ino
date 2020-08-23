@@ -406,27 +406,92 @@ struct MoreEqualComp
     static bool compare(const T& a, const T& b) { return a >= b; }
 };
 
+class AnalogMonitor
+{
+   private:
+    int pin;
+    int val;
+
+   protected:
+    bool needs_update;
+
+   public:
+    AnalogMonitor(int pin) : pin{pin}, val{0}, needs_update{true}
+    {}
+
+    virtual ~AnalogMonitor() = default;
+
+    virtual void read() {
+        if (needs_update) {
+            val = analogRead(pin);
+            needs_update = false;
+        }
+    }
+
+    virtual int value() {
+        if (needs_update)
+            read();
+
+        return val;
+    }
+
+    virtual void clear() {
+        needs_update = true;
+    }
+};
+
+template<int N>
+class AveragedAnalogMonitor : public AnalogMonitor
+{
+   private:
+    int buffer[N];
+    int pos;
+    int count;
+
+   public:
+    AveragedAnalogMonitor(int pin) : AnalogMonitor{pin}, buffer{0}, pos{0}, count{0}
+    {}
+
+    int value() {
+        if (this->needs_update) {
+            int val = AnalogMonitor::value();
+
+            buffer[pos] = val;
+            pos = (pos + 1) % N;
+            count = count < N ? count++ : N;
+        }
+
+        int sum = 0;
+        for (int i = 0; i < count; ++i)
+            sum += buffer[i];
+
+        return sum/count;
+    }
+};
+
 template<template<typename> class Trigger, template<typename> class Comperator>
 class AnalogEvent : public Event
 {
    private:
-    int pin;
+    AnalogMonitor *monitor;
     Trigger<Comperator<int>> trigger;
 
    public:
-    AnalogEvent(int pin, int reference, const callback_func &f) : Event{f},
-        pin{pin}, trigger{reference}
+    AnalogEvent(AnalogMonitor *monitor, int reference, const callback_func &f) : Event{f},
+        monitor{monitor}, trigger{reference}
     {}
 
     void check_and_handle(uint32_t ms)
     {
-        int val = analogRead(pin);
+        int val = monitor->value();
 
         if (trigger.triggered(val))
             this->handle();
     }
 
     void reset() { trigger.reset(); }
+
+    void clear() { monitor->clear(); }
 };
 
 class TimerEvent : public Event
@@ -491,6 +556,9 @@ class TrackFinishedEvent : public Event
 
     void trigger(uint16_t track)
     {
+        if (last_track == track)
+            return;
+
         triggered = true;
         last_track = track;
     }
@@ -2720,11 +2788,13 @@ constexpr int battery_event_reference_value(float battery_voltage)
     return (battery_voltage / factor) * (1023 / ref_voltage);
 }
 
-static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(VOLTAGE_PIN, battery_event_reference_value(3.5) + 2,
+static AveragedAnalogMonitor<8> voltage_monitor(VOLTAGE_PIN);
+
+static AnalogEvent<EdgeTrigger, MoreEqualComp> battery_high_event(&voltage_monitor, battery_event_reference_value(3.7),
     []() -> bool { return mode->battery_high(); });
-static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(VOLTAGE_PIN, battery_event_reference_value(3.5),
+static AnalogEvent<EdgeTrigger, LessEqualComp> battery_low_event(&voltage_monitor, battery_event_reference_value(3.5),
     []() -> bool { return mode->battery_low(); });
-static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(VOLTAGE_PIN, battery_event_reference_value(3.0),
+static AnalogEvent<EdgeTrigger, LessComp> battery_critical_event(&voltage_monitor, battery_event_reference_value(3.0),
     []() -> bool { return mode->battery_critical(); });
 
 #ifdef SERIAL_DEBUG
