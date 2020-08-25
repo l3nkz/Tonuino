@@ -27,7 +27,7 @@
 #define FIVEBUTTONS
 
 /* Uncomment this if you have a status LED on in your system */
-#define STATUS_LED
+//#define STATUS_LED
 
 /* Uncomment one of the below to define what should be done when shutting
    down the system */
@@ -2661,7 +2661,6 @@ class LockedMode : public DefaultMode
     LockedMode(DefaultMode *current) : DefaultMode{current},
         shutdown_timer(LOCKED_SHUTDOWN_MS, []() -> bool { shutdown(); return true; })
     {
-        mgr.add(&blink_timer);
     }
 #else
     LockedMode(DefaultMode *current) : DefaultMode{current},
