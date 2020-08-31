@@ -47,7 +47,7 @@
 #define HAS_UNUSED_INPUT
 
 /* Uncomment this if you want more serial debugging support */
-#define SERIAL_DEBUG
+//#define SERIAL_DEBUG
 
 
 /* Update these according to your hardware setup */
