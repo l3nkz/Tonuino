@@ -26,8 +26,17 @@
 /* Uncomment this if you have extra buttons for volume up and down */
 #define FIVEBUTTONS
 
-/* Uncomment this if you have a status LED on in your system */
-//#define STATUS_LED
+/* Uncomment this if you have a status LED on in your system
+ * The LED will be green when the system is running and blink red if the
+ * system is locked. */
+#define HAS_STATUS_LED
+
+/* Uncomment this if you have a battery voltage input to your system
+ * Having a voltage input pin will allow the system to automatically turn
+ * off if the battery in on low voltage. If this is combined with a status
+ * LED, the color of the LED will also indicate the current charge level.
+ * Green means battery is full, red means battery has to be recharged. */
+#define HAS_VOLTAGE_PIN
 
 /* Uncomment one of the below to define what should be done when shutting
    down the system */
@@ -38,7 +47,7 @@
 #define HAS_UNUSED_INPUT
 
 /* Uncomment this if you want more serial debugging support */
-//#define SERIAL_DEBUG
+#define SERIAL_DEBUG
 
 
 /* Update these according to your hardware setup */
@@ -61,10 +70,12 @@
 #define RFID_SS_PIN 10
 
 /* Pin usage for the battery voltage input */
+#ifdef HAS_VOLTAGE_PIN
 #define VOLTAGE_PIN A0
+#endif
 
 /* Pin usage for other status LED */
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
 #define STATUS_LED_PIN 8
 #endif
 
@@ -81,7 +92,7 @@
 
 
 /* Additional includes needed for optional features */
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
 #include <FastLED.h>
 #endif
 
@@ -105,7 +116,7 @@ static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
    when there is no further input */
 static const uint32_t ABORT_MENU_MS = 60000;        // == 1 minute
 
-#if defined(STATUS_LED) and defined(SERIAL_DEBUG)
+#if defined(HAS_VOLTAGE_PIN) and defined(SERIAL_DEBUG)
 /* How long the system should wait between consecutive outputs of
    the current battery voltage. */
 static const uint32_t PRINT_VOLTAGE_MS = 120000;     // == 2 minutes
@@ -1224,6 +1235,7 @@ class Mode
     virtual bool timer() { return true; }
     virtual bool is_playing() { return false; }
 
+#ifdef HAS_VOLTAGE_PIN
     virtual bool battery_high() { return true; }
     virtual bool battery_low() { return true; }
     bool battery_critical()
@@ -1233,6 +1245,7 @@ class Mode
 
         return true;
     }
+#endif
 
     template <class M, class ...Args>
     Mode* switch_to(Args... args)
@@ -1248,7 +1261,7 @@ class Mode
     }
 };
 
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
 class LEDMode : public Mode
 {
    protected:
@@ -1256,7 +1269,10 @@ class LEDMode : public Mode
 
    protected:
     LEDMode(LEDMode *current) : Mode{current}, battery_led{current->battery_led}
-    {}
+    {
+        *battery_led = CRGB::Green;
+        FastLED.show();
+    }
 
    public:
     LEDMode(CRGB *battery_led) : battery_led{battery_led}
@@ -1264,6 +1280,7 @@ class LEDMode : public Mode
 
     ~LEDMode() = default;
 
+#ifdef HAS_VOLTAGE_PIN
     bool battery_high()
     {
         *battery_led = CRGB::Green;
@@ -1279,6 +1296,7 @@ class LEDMode : public Mode
 
         return true;
     }
+#endif
 
     template <class M, class ...Args>
     LEDMode* switch_to(Args... args)
@@ -2630,13 +2648,13 @@ class LockedMode : public DefaultMode
    private:
     TimerEvent shutdown_timer;
 
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
     bool led_on;
     TimerEvent blink_timer;
 #endif
 
    private:
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
     void switch_led_state()
     {
         if (led_on) {
@@ -2654,16 +2672,17 @@ class LockedMode : public DefaultMode
     void activate()
     {
         Serial.println(F("The system is locked. Use unlock card to use the system again."));
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
         switch_led_state();
 #endif
     }
 
    public:
-#ifndef STATUS_LED
+#ifndef HAS_STATUS_LED
     LockedMode(DefaultMode *current) : DefaultMode{current},
         shutdown_timer(LOCKED_SHUTDOWN_MS, []() -> bool { shutdown(); return true; })
     {
+        mgr.add(&shutdown_timer);
     }
 #else
     LockedMode(DefaultMode *current) : DefaultMode{current},
@@ -2679,14 +2698,14 @@ class LockedMode : public DefaultMode
     ~LockedMode()
     {
         mgr.remove(&shutdown_timer);
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
         mgr.remove(&blink_timer);
 #endif
 
         mgr.reset();
     }
 
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
     bool timer()
     {
         switch_led_state();
@@ -2726,7 +2745,7 @@ class LockedMode : public DefaultMode
 
 static SoftwareSerial mp3_player_serial(DFPLAYER_INPUT_PIN, DFPLAYER_OUTPUT_PIN);
 
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
 CRGB leds[1];
 #endif
 
@@ -2764,7 +2783,7 @@ TrackFinishedEvent *MP3Notification::e = &track_finished_event; // We need to gi
                                                                 // our TrackFinishedEvent, so that it can be properly handled in the
                                                                 // event loop.
 
-#ifdef STATUS_LED
+#ifdef HAS_VOLTAGE_PIN
 /* This method will calculate the ADC value interpreted from the
    voltage at the voltage pin, so that we can decide in which state
    the battery currently is.
@@ -2848,7 +2867,7 @@ void setup()
     mp3_player->setPlaybackSource(DfMp3_PlaySource_Sd);
 
     /* Start the default mode */
-#ifdef STATUS_LED
+#ifdef HAS_STATUS_LED
     FastLED.addLeds<NEOPIXEL, STATUS_LED_PIN>(leds, 1);
 
     mode = new DefaultMode(&leds[0]);
@@ -2886,7 +2905,7 @@ void setup()
     new_card_event.rfid_reader(rfid_reader);
     mgr.add(&new_card_event);
 
-#ifdef STATUS_LED
+#ifdef HAS_VOLTAGE_PIN
     pinMode(VOLTAGE_PIN, INPUT);
     analogReference(INTERNAL);
 
