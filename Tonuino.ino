@@ -458,7 +458,8 @@ class AveragedAnalogMonitor : public AnalogMonitor
 
             buffer[pos] = val;
             pos = (pos + 1) % N;
-            count = count < N ? count++ : N;
+            if (count < N)
+                count = count + 1;
         }
 
         int sum = 0;
