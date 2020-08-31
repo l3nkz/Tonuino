@@ -1224,6 +1224,16 @@ class Mode
     virtual bool timer() { return true; }
     virtual bool is_playing() { return false; }
 
+    virtual bool battery_high() { return true; }
+    virtual bool battery_low() { return true; }
+    bool battery_critical()
+    {
+        Serial.println(F("Battery level is critical! Shutting down."));
+        shutdown();
+
+        return true;
+    }
+
     template <class M, class ...Args>
     Mode* switch_to(Args... args)
     {
@@ -1266,14 +1276,6 @@ class LEDMode : public Mode
     {
         *battery_led = CRGB::Red;
         FastLED.show();
-
-        return true;
-    }
-
-    bool battery_critical()
-    {
-        Serial.println(F("Battery level is critical! Shutting down."));
-        shutdown();
 
         return true;
     }
