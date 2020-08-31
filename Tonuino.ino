@@ -2168,7 +2168,9 @@ class AdminMode : public DefaultMode
             Serial.println(F(")"));
 
             if(intro != 0)
-                this->player->play(intro);
+                this->player->play(intro, true);
+            if (selections != 0)
+                this->player->play(selections+(cur-minimum));
         }
 
         void next()
