@@ -613,27 +613,18 @@ class MP3Notification
         Serial.println(ec);
     }
 
-    static void OnPlayFinished(uint16_t track)
+    static void OnPlayFinished(DfMp3_PlaySources /* unused */, uint16_t track)
     {
         e->trigger(track);
     }
 
-    static void OnCardOnline(uint16_t code)
+    static void OnPlaySourceOnline(DfMp3_PlaySources /* unused */)
     {}
 
-    static void OnUsbOnline(uint16_t code)
+    static void OnPlaySourceInserted(DfMp3_PlaySources /* unused */)
     {}
 
-    static void OnCardInserted(uint16_t code)
-    {}
-
-    static void OnUsbInserted(uint16_t code)
-    {}
-
-    static void OnCardRemoved(uint16_t code)
-    {}
-
-    static void OnUsbRemoved(uint16_t code)
+    static void OnPlaySourceRemoved(DfMp3_PlaySources /* unused */)
     {}
 };
 
