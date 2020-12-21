@@ -2550,7 +2550,7 @@ class AdminMode : public DefaultMode
                     next = new SelectMenu<uint8_t>(this, settings->min_volume, 0, settings->max_volume, &settings->min_volume, 320, 1);
                     break;
                 case MaxVolume:
-                    next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume, 330, 1);
+                    next = new SelectMenu<uint8_t>(this, settings->max_volume, settings->min_volume, 30, &settings->max_volume, 330, settings->min_volume);
                     break;
                 case Equalizer:
                     next = new SelectMenu<uint8_t>(this, settings->equalizer, 0, 5, &settings->equalizer, 340, 341);
