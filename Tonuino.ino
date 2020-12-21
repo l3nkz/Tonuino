@@ -2781,6 +2781,8 @@ class LockedMode : public DefaultMode
             RFIDCard::Special *s = card.special();
 
             switch (s->mode) {
+                case SpecialModes::LOCKED:
+                    /* explicit fall through */
                 case SpecialModes::UNLOCKED:
                     Serial.println(F("Unlocking system"));
                     settings->locked = false;
