@@ -112,6 +112,10 @@ static const uint32_t LOCKED_SHUTDOWN_MS = 5000;   // == 5 seconds
 /* The duration the system waits before stopping a paused playback */
 static const uint32_t STOP_PLAYBACK_MS = 60000;     // == 1 minute
 
+/* The duration the system should wait before pausing the playback when sleep mode
+   is activated during the playback. */
+static const uint32_t SLEEP_PLAYBACK_MS = 600000;   // == 10 minutes
+
 /* The duration the system waits before exiting from the admin menu
    when there is no further input */
 static const uint32_t ABORT_MENU_MS = 60000;        // == 1 minute
@@ -645,6 +649,7 @@ enum class SpecialModes : uint8_t {
     ADMIN = 1,
     LOCKED = 2,
     UNLOCKED = 3,
+    SLEEP = 4,
 };
 
 class RFIDCard
@@ -1223,7 +1228,7 @@ class Mode
     virtual bool volume_down() { return true; }
     virtual bool track_finished() { return true; }
     virtual bool new_card() { return true; }
-    virtual bool timer() { return true; }
+    virtual bool timer(int id=0) { return true; }
     virtual bool is_playing() { return false; }
 
 #ifdef HAS_VOLTAGE_PIN
@@ -1764,7 +1769,7 @@ class StandbyMode : public DefaultMode
         return true;
     }
 
-    bool timer()
+    bool timer(int /* unused */)
     {
         Serial.println(F("Shutting down ..."));
         shutdown();
@@ -1796,7 +1801,10 @@ class StandbyMode : public DefaultMode
                     mode = switch_to<LockedMode>();
                     break;
                 case SpecialModes::UNLOCKED:
+                    /* explicit fall through */
+                case SpecialModes::SLEEP:
                     break;
+
             }
         }
 
@@ -1807,10 +1815,18 @@ class StandbyMode : public DefaultMode
 class PlaybackMode : public DefaultMode
 {
    private:
+    enum Timers : int {
+        ABORT_TIMER = 0,
+        SLEEP_TIMER = 1,
+    };
+
     PlayerMode *pmode;
 
     bool timer_active;
     TimerEvent abort_timer;
+
+    bool sleep_active;
+    TimerEvent sleep_timer;
 
     void set_play_mode(const RFIDCard::Folder *folder)
     {
@@ -1852,6 +1868,35 @@ class PlaybackMode : public DefaultMode
         timer_active = false;
     }
 
+    void activate_sleep()
+    {
+        if (sleep_active)
+            return;
+
+        sleep_active = true;
+        sleep_timer.reset();
+        mgr.add(&sleep_timer);
+        Serial.println(F("Activate Sleep"));
+    }
+
+    void reset_sleep()
+    {
+        if (!sleep_active)
+            return;
+
+        sleep_timer.reset();
+    }
+
+    void deactivate_sleep()
+    {
+        if (!sleep_active)
+            return;
+
+        mgr.remove(&sleep_timer);
+        sleep_active = false;
+        Serial.println(F("Deactivate Sleep"));
+    }
+
     void activate()
     {
         pmode->play();
@@ -1864,7 +1909,8 @@ class PlaybackMode : public DefaultMode
 
    public:
     PlaybackMode(DefaultMode *current, const RFIDCard::Folder *folder) : DefaultMode{current}, pmode{nullptr},
-        timer_active{false}, abort_timer{STOP_PLAYBACK_MS, []() -> bool { return mode->timer(); }}
+        timer_active{false}, abort_timer{STOP_PLAYBACK_MS, []() -> bool { return mode->timer(ABORT_TIMER); }},
+        sleep_active{false}, sleep_timer{SLEEP_PLAYBACK_MS, []() -> bool { return mode->timer(SLEEP_TIMER); }}
     {
         Serial.println(F("Started Playback mode"));
 
@@ -1880,6 +1926,7 @@ class PlaybackMode : public DefaultMode
             delete pmode;
 
         deactivate_timer();
+        deactivate_sleep();
     }
 
     bool play()
@@ -1889,6 +1936,7 @@ class PlaybackMode : public DefaultMode
             return pmode->pause();
         } else {
             deactivate_timer();
+            reset_sleep();
             return pmode->play();
         }
     }
@@ -1986,16 +2034,29 @@ class PlaybackMode : public DefaultMode
                     break;
                 case SpecialModes::UNLOCKED:
                     break;
+                case SpecialModes::SLEEP:
+                    if (!sleep_active)
+                        activate_sleep();
+                    else
+                        deactivate_sleep();
+                    break;
             }
         }
 
         return true;
     }
 
-    bool timer()
+    bool timer(int id)
     {
-        /* Fall back to standby mode */
-        mode = switch_to<StandbyMode>();
+        if (id == ABORT_TIMER) {
+            /* Fall back to standby mode */
+            mode = switch_to<StandbyMode>();
+        } else if (id == SLEEP_TIMER) {
+            /* Pause the playback and start shutdown timer */
+            activate_timer();
+            pmode->pause();
+        }
+
         return true;
     }
 
@@ -2425,7 +2486,7 @@ class AdminMode : public DefaultMode
         }
 
        public:
-        SpecialCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 3, &value, 380, 381), step{Steps::ChooseMode}
+        SpecialCardMenu(Menu *parent) : SelectMenu(parent, 1, 1, 4, &value, 380, 381), step{Steps::ChooseMode}
         {}
 
         void activate()
@@ -2626,7 +2687,7 @@ class AdminMode : public DefaultMode
         return true;
     }
 
-    bool timer()
+    bool timer(int /* unused */)
     {
         menu = menu->abort();
         if (!menu)
@@ -2699,7 +2760,7 @@ class LockedMode : public DefaultMode
     }
 
 #ifdef HAS_STATUS_LED
-    bool timer()
+    bool timer(int /* unused */)
     {
         switch_led_state();
         return true;

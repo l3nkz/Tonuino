@@ -44,6 +44,7 @@
 0381-special_card-mode-admin|Adminkarte
 0382-special_card-mode-lock|Sperrkarte
 0383-special_card-mode-unlock|Entsperrkarte
+0384-special_card-mode-sleep|Einschlafmoduskarte
 
 # General success or failure messages
 0400-wait_for_card|Lege jetzt die Karte auf
