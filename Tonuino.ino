@@ -833,7 +833,6 @@ class RFIDReader
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_1K ) ||
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_4K ) )
         {
-            Serial.println(F("Authenticating using key A"));
             status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, auth_block, &key, &(mfrc522.uid));
         } else {
             Serial.println(F("Unsupported MIFARE type"));
@@ -876,7 +875,6 @@ class RFIDReader
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_1K ) ||
             (mifare_type == MFRC522::PICC_TYPE_MIFARE_4K ) )
         {
-            Serial.println(F("Authenticating using key A"));
             status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, auth_block, &key, &(mfrc522.uid));
         } else {
             Serial.println(F("Unsupported MIFARE type"));
@@ -1499,8 +1497,6 @@ class AlbumPlayerMode : public PlayerMode
    public:
     AlbumPlayerMode(uint8_t folder) : PlayerMode{folder}
     {
-        Serial.print(F("Folder: "));
-        Serial.print(folder);
         Serial.println(F(" mode: ALBUM"));
     }
 };
@@ -1512,6 +1508,7 @@ class AudioBookPlayerMode : public PlayerMode
 
     void _stop()
     {
+        PlayerMode::_stop();
         settings->remove_progress(folder);
         save_progress = false;
     }
@@ -1531,8 +1528,6 @@ class AudioBookPlayerMode : public PlayerMode
    public:
     AudioBookPlayerMode(uint8_t folder) : PlayerMode{folder}, save_progress{true}
     {
-        Serial.print(F("Folder: "));
-        Serial.print(folder);
         Serial.println(F(" mode: AUDIOBOOK"));
 
         /* Get from the EEPROM where we last finished listening */
@@ -1581,8 +1576,6 @@ class PartyPlayerMode : public PlayerMode
    public:
     PartyPlayerMode(uint8_t folder) : PlayerMode{folder}, queue{nullptr}, cur_ele{0}
     {
-        Serial.print(F("Folder: "));
-        Serial.print(folder);
         Serial.println(F(" mode: PARTY"));
 
         /* Generate our title queue */
@@ -1614,8 +1607,6 @@ class RepeatOnePlayerMode : public PlayerMode
    public:
     RepeatOnePlayerMode(uint8_t folder, uint8_t track) : PlayerMode{folder}
     {
-        Serial.print(F("Folder: "));
-        Serial.print(folder);
         Serial.print(F(" mode: ONE track: "));
         Serial.println(track);
 
@@ -1782,7 +1773,6 @@ class StandbyMode : public DefaultMode
 
         RFIDCard card;
         if (!rfid_reader->read_card(card)) {
-            Serial.println(F("Failed to read card."));
             mp3_player->playMp3FolderTrack(404);
             return false;
         }
@@ -1832,6 +1822,9 @@ class PlaybackMode : public DefaultMode
     {
         if (pmode)
             delete pmode;
+
+        Serial.print(F("Folder: "));
+        Serial.print(folder->folder);
 
         switch(folder->mode) {
             case FolderModes::ALBUM:
@@ -2014,10 +2007,8 @@ class PlaybackMode : public DefaultMode
     bool new_card()
     {
         RFIDCard card;
-        if (!rfid_reader->read_card(card)) {
-            Serial.println(F("Failed to read card."));
+        if (!rfid_reader->read_card(card))
             return false;
-        }
 
         if (card.type == RFIDCard::Type::FOLDER) {
             mode = switch_to<PlaybackMode>(card.folder());
@@ -2725,7 +2716,7 @@ class LockedMode : public DefaultMode
 
     void activate()
     {
-        Serial.println(F("The system is locked. Use unlock card to use the system again."));
+        Serial.println(F("Locked! Use lock/unlock card."));
 #ifdef HAS_STATUS_LED
         switch_led_state();
 #endif
@@ -2771,27 +2762,17 @@ class LockedMode : public DefaultMode
     {
         RFIDCard card;
         if (!rfid_reader->read_card(card)) {
-            Serial.println(F("Failed to read card."));
             return false;
         }
 
-        if (card.type == RFIDCard::Type::FOLDER) {
+        if (card.type == RFIDCard::Type::SPECIAL &&
+                (card.special()->mode == SpecialModes::LOCKED || card.special()->mode == SpecialModes::UNLOCKED)) {
+            Serial.println(F("Unlocking system"));
+            settings->locked = false;
+            mode = switch_to<StandbyMode>();
+        } else {
+            /* All the other cases -> Folder Card or other Special cards! */
             Serial.println(F("The system is locked!"));
-        } else if (card.type == RFIDCard::Type::SPECIAL) {
-            RFIDCard::Special *s = card.special();
-
-            switch (s->mode) {
-                case SpecialModes::LOCKED:
-                    /* explicit fall through */
-                case SpecialModes::UNLOCKED:
-                    Serial.println(F("Unlocking system"));
-                    settings->locked = false;
-                    mode = switch_to<StandbyMode>();
-                    break;
-                default:
-                    Serial.println(F("The system is locked!"));
-                    break;
-            }
         }
 
         return true;
