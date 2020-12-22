@@ -67,3 +67,4 @@ features or changed how things worked.
  * Control via serial console (DEBUG_SERIAL)
  * Dump settings (DEBUG_SERIAL)
  * Dump RFID card (DEBUG_SERIAL)
+ * Sleep mode during playback (playback will be paused after a defined time period)
